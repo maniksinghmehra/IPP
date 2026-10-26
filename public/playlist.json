@@ -1,0 +1,17 @@
+[
+  {
+    "title": "First Light",
+    "artist": "Studio Click",
+    "src": "/music/first-light.wav"
+  },
+  {
+    "title": "Slow Orbit",
+    "artist": "Studio Click",
+    "src": "/music/slow-orbit.wav"
+  },
+  {
+    "title": "After Hours",
+    "artist": "Studio Click",
+    "src": "/music/after-hours.wav"
+  }
+]
