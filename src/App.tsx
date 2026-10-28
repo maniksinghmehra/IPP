@@ -60,10 +60,8 @@ function App() {
     return 'medium'
   })
   const [volumeIndicatorVisible, setVolumeIndicatorVisible] = useState(false)
-  const [lcdDimmed, setLcdDimmed] = useState(false)
   const menuReturnView = useRef<ScreenView>('nowPlaying')
   const deviceRef = useRef<HTMLDivElement>(null)
-  const inactivityTimeoutRef = useRef<number | null>(null)
   const volumeTimeoutRef = useRef<number | null>(null)
   const hasTracks = status === 'ready' && tracks.length > 0
 
@@ -82,27 +80,7 @@ function App() {
     return () => window.clearTimeout(timeout)
   }, [shareMessage])
 
-  const wakeScreen = useCallback(() => {
-    setLcdDimmed(false)
-    if (inactivityTimeoutRef.current !== null) {
-      window.clearTimeout(inactivityTimeoutRef.current)
-    }
-    inactivityTimeoutRef.current = window.setTimeout(() => {
-      setLcdDimmed(true)
-    }, 30000)
-  }, [])
-
-  useEffect(() => {
-    wakeScreen()
-    return () => {
-      if (inactivityTimeoutRef.current !== null) {
-        window.clearTimeout(inactivityTimeoutRef.current)
-      }
-      if (volumeTimeoutRef.current !== null) {
-        window.clearTimeout(volumeTimeoutRef.current)
-      }
-    }
-  }, [wakeScreen])
+  const wakeScreen = useCallback(() => {}, [])
 
   const showVolumeIndicator = useCallback(() => {
     setVolumeIndicatorVisible(true)
@@ -629,7 +607,6 @@ function App() {
                 volume={volume}
                 showVolumeIndicator={volumeIndicatorVisible}
                 backlight={backlight}
-                lcdDimmed={lcdDimmed}
                 onSelectTrack={handleTrackPress}
                 onSelectMenu={handleMenuRowPress}
                 onSelectSetting={handleSettingPress}

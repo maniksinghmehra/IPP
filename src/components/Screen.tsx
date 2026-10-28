@@ -24,7 +24,6 @@ interface ScreenProps {
   volume?: number
   showVolumeIndicator?: boolean
   backlight?: 'low' | 'medium' | 'high'
-  lcdDimmed?: boolean
   onSelectTrack: (index: number) => void
   onSelectMenu: (target: MenuView, index: number) => void
   onSelectSetting: (index: number) => void
@@ -542,7 +541,6 @@ export function Screen({
   volume = 0.7,
   showVolumeIndicator = false,
   backlight = 'medium',
-  lcdDimmed = false,
   onSelectTrack,
   onSelectMenu,
   onSelectSetting,
@@ -642,7 +640,7 @@ export function Screen({
         : ' screen--backlight-medium'
 
   return (
-    <div className={`screen${backlightClass}${lcdDimmed ? ' screen--dimmed' : ''}`}>
+    <div className={`screen${backlightClass}`}>
       <div className="screen__glare" aria-hidden="true" />
       {content}
     </div>
