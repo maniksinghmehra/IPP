@@ -16,6 +16,12 @@ export function useAudioPlayer(tracks: Track[]) {
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [trackError, setTrackError] = useState<string | null>(null)
+  const [volume, setVolumeState] = useState(() => {
+    if (typeof window === 'undefined') return 0.7
+    const saved = localStorage.getItem('music-volume')
+    const v = saved ? parseFloat(saved) : 0.7
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7
+  })
 
   const currentTrack = tracks[currentIndex] ?? null
 
@@ -26,6 +32,9 @@ export function useAudioPlayer(tracks: Track[]) {
   useEffect(() => {
     const audio = new Audio()
     audio.preload = 'metadata'
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('music-volume') : null
+    const v = saved ? parseFloat(saved) : 0.7
+    audio.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7
     audioRef.current = audio
 
     const handleTimeUpdate = () => {
@@ -245,6 +254,50 @@ export function useAudioPlayer(tracks: Track[]) {
     setCurrentTime(nextTime)
   }, [])
 
+  const seekBy = useCallback((seconds: number) => {
+    const audio = audioRef.current
+
+    if (!audio || !Number.isFinite(audio.duration)) {
+      return
+    }
+
+    const nextTime = Math.max(
+      0,
+      Math.min(audio.duration, audio.currentTime + seconds),
+    )
+    audio.currentTime = nextTime
+    setCurrentTime(nextTime)
+  }, [])
+
+  const setVolume = useCallback((v: number) => {
+    const clamped = Math.max(0, Math.min(1, v))
+    setVolumeState(clamped)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('music-volume', clamped.toString())
+    }
+    const audio = audioRef.current
+    if (audio) {
+      audio.volume = clamped
+    }
+  }, [])
+
+  const adjustVolume = useCallback(
+    (delta: number) => {
+      setVolumeState((prev) => {
+        const clamped = Math.max(0, Math.min(1, prev + delta))
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('music-volume', clamped.toString())
+        }
+        const audio = audioRef.current
+        if (audio) {
+          audio.volume = clamped
+        }
+        return clamped
+      })
+    },
+    [],
+  )
+
   return {
     currentTrack,
     currentIndex,
@@ -252,11 +305,15 @@ export function useAudioPlayer(tracks: Track[]) {
     currentTime,
     duration,
     trackError,
+    volume,
     togglePlayback,
     selectTrack,
     next,
     previous,
     seek,
+    seekBy,
+    adjustVolume,
+    setVolume,
     retry: startPlayback,
   }
 }
