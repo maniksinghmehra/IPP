@@ -1,4 +1,4 @@
-import { cpSync } from 'node:fs'
+import { cpSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
@@ -12,9 +12,15 @@ function copyLocalSongs(): Plugin {
     name: 'copy-local-songs',
     apply: 'build',
     closeBundle() {
-      cpSync(resolve(projectRoot, 'songs'), resolve(projectRoot, 'dist', 'songs'), {
-        recursive: true,
-      })
+      const candidates = ['Songs', 'songs']
+      for (const name of candidates) {
+        const src = resolve(projectRoot, name)
+        if (existsSync(src)) {
+          const dest = resolve(projectRoot, 'dist', 'songs')
+          cpSync(src, dest, { recursive: true })
+          return
+        }
+      }
     },
   }
 }
