@@ -1,4 +1,4 @@
-# Music Player — a classic music player
+# Playlist
 
 A responsive, iPod-inspired music player built with React and TypeScript. It pairs a white click wheel and a blue-gray LCD with one local playlist and browser-native audio playback. There is no sign-in, upload flow, external music service, or database.
 
