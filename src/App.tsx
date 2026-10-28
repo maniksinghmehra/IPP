@@ -60,6 +60,7 @@ function App() {
     return 'medium'
   })
   const [volumeIndicatorVisible, setVolumeIndicatorVisible] = useState(false)
+  const [playlistSubView, setPlaylistSubView] = useState<'playlists' | 'songs'>('playlists')
   const menuReturnView = useRef<ScreenView>('nowPlaying')
   const deviceRef = useRef<HTMLDivElement>(null)
   const volumeTimeoutRef = useRef<number | null>(null)
@@ -94,6 +95,12 @@ function App() {
 
   const handleMenuAction = useCallback(() => {
     wakeScreen()
+    if (view === 'playlist') {
+      if (playlistSubView === 'songs') {
+        setPlaylistSubView('playlists')
+        return
+      }
+    }
     if (view === 'menu') {
       setView(menuReturnView.current)
       return
@@ -102,13 +109,17 @@ function App() {
     menuReturnView.current = view
     setMenuIndex(menuIndexOf(view))
     setView('menu')
-  }, [view, wakeScreen])
+  }, [view, wakeScreen, playlistSubView])
 
   const handleMenuSelect = useCallback(
     (target: MenuView) => {
       wakeScreen()
-      if (target === 'playlist' || target === 'songs') {
+      if (target === 'playlist') {
         setSelectedIndex(currentIndex)
+        setPlaylistSubView('playlists')
+      } else if (target === 'songs') {
+        setSelectedIndex(currentIndex)
+        setPlaylistSubView('songs')
       }
 
       if (target === 'settings') {
@@ -371,7 +382,19 @@ function App() {
       return
     }
 
-    if (view === 'playlist' || view === 'songs') {
+    if (view === 'playlist') {
+      if (playlistSubView === 'playlists') {
+        setPlaylistSubView('songs')
+        return
+      }
+      if (tracks.length === 0) {
+        return
+      }
+      handleSelectTrack(selectedIndex)
+      return
+    }
+
+    if (view === 'songs') {
       if (tracks.length === 0) {
         return
       }
@@ -390,6 +413,7 @@ function App() {
     menuIndex,
     playClick,
     playSelect,
+    playlistSubView,
     selectedIndex,
     settingsIndex,
     tracks.length,
@@ -607,6 +631,8 @@ function App() {
                 volume={volume}
                 showVolumeIndicator={volumeIndicatorVisible}
                 backlight={backlight}
+                playlistSubView={playlistSubView}
+                onPlaylistSubViewChange={setPlaylistSubView}
                 onSelectTrack={handleTrackPress}
                 onSelectMenu={handleMenuRowPress}
                 onSelectSetting={handleSettingPress}

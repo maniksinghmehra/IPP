@@ -24,6 +24,8 @@ interface ScreenProps {
   volume?: number
   showVolumeIndicator?: boolean
   backlight?: 'low' | 'medium' | 'high'
+  playlistSubView?: 'playlists' | 'songs'
+  onPlaylistSubViewChange?: (view: 'playlists' | 'songs') => void
   onSelectTrack: (index: number) => void
   onSelectMenu: (target: MenuView, index: number) => void
   onSelectSetting: (index: number) => void
@@ -541,6 +543,8 @@ export function Screen({
   volume = 0.7,
   showVolumeIndicator = false,
   backlight = 'medium',
+  playlistSubView,
+  onPlaylistSubViewChange,
   onSelectTrack,
   onSelectMenu,
   onSelectSetting,
@@ -550,13 +554,15 @@ export function Screen({
   onNextTrack,
 }: ScreenProps) {
   const currentTrack = tracks[currentIndex] ?? null
-  const [playlistView, setPlaylistView] = useState<'playlists' | 'songs'>('playlists')
+  const [internalPlaylistView, setInternalPlaylistView] = useState<'playlists' | 'songs'>('playlists')
+  const playlistView = playlistSubView ?? internalPlaylistView
+  const setPlaylistView = onPlaylistSubViewChange ?? setInternalPlaylistView
 
   useEffect(() => {
     if (view !== 'playlist') {
       setPlaylistView('playlists')
     }
-  }, [view])
+  }, [view, setPlaylistView])
 
   let content: ReactNode
 
