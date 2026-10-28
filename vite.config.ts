@@ -25,6 +25,13 @@ function copyLocalSongs(): Plugin {
           }
         }
       }
+      const musicSrc = resolve(projectRoot, 'public', 'music')
+      if (existsSync(musicSrc)) {
+        try {
+          const dest = resolve(projectRoot, 'dist', 'music')
+          cpSync(musicSrc, dest, { recursive: true, force: true, errorOnExist: false })
+        } catch {}
+      }
     },
   }
 }
