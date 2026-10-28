@@ -16,9 +16,13 @@ function copyLocalSongs(): Plugin {
       for (const name of candidates) {
         const src = resolve(projectRoot, name)
         if (existsSync(src)) {
-          const dest = resolve(projectRoot, 'dist', 'songs')
-          cpSync(src, dest, { recursive: true })
-          return
+          try {
+            const dest = resolve(projectRoot, 'dist', 'songs')
+            cpSync(src, dest, { recursive: true, force: true, errorOnExist: false })
+            return
+          } catch {
+            return
+          }
         }
       }
     },
