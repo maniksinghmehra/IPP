@@ -5,6 +5,7 @@ const AUDIO_ERROR_MESSAGE =
   "This track couldn't be loaded. Check that the audio file exists in public/music."
 
 const PRELOAD_SLOTS = 2
+const PREFETCH_DELAY = 800
 
 function isAbortError(error: unknown) {
   return (
@@ -331,6 +332,17 @@ export function useAudioPlayer(tracks: Track[]) {
 
       const nextActive = audioRef.current
 
+      for (const spare of spareAudioRefs.current) {
+        if (spare === nextActive) {
+          continue
+        }
+        if (spare.getAttribute('src')) {
+          spare.pause()
+          spare.removeAttribute('src')
+          spare.load()
+        }
+      }
+
       if (nextActive) {
         if (nextActive.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
           setIsBuffering(false)
@@ -393,15 +405,27 @@ export function useAudioPlayer(tracks: Track[]) {
   }, [currentTrack, currentIndex])
 
   useEffect(() => {
-    const spares = spareAudioRefs.current
-    const currentAudio = audioRef.current
-
-    if (!currentAudio || tracks.length < 2 || committedIndex < 0) {
-      for (const spare of spares) {
+    const stopSpares = () => {
+      const currentAudio = audioRef.current
+      for (const spare of spareAudioRefs.current) {
+        if (spare === currentAudio) {
+          continue
+        }
         spare.pause()
         spare.removeAttribute('src')
         spare.load()
       }
+    }
+
+    const currentAudio = audioRef.current
+
+    if (
+      !currentAudio ||
+      tracks.length < 2 ||
+      committedIndex < 0 ||
+      currentAudio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
+    ) {
+      stopSpares()
       return
     }
 
@@ -423,24 +447,41 @@ export function useAudioPlayer(tracks: Track[]) {
       upcoming.push(track)
     }
 
-    spares.forEach((spare, index) => {
-      const target = upcoming[index]
+    const timeout = window.setTimeout(() => {
+      const activeAudio = audioRef.current
 
-      if (!target) {
-        if (spare.getAttribute('src')) {
-          spare.pause()
-          spare.removeAttribute('src')
-          spare.load()
-        }
+      if (
+        !activeAudio ||
+        activeAudio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
+      ) {
         return
       }
 
-      if (spare.getAttribute('src') !== target.src) {
-        spare.src = target.src
-        spare.load()
-      }
-    })
-  }, [committedIndex, tracks])
+      spareAudioRefs.current.forEach((spare, index) => {
+        if (spare === activeAudio) {
+          return
+        }
+
+        const target = upcoming[index]
+
+        if (!target) {
+          if (spare.getAttribute('src')) {
+            spare.pause()
+            spare.removeAttribute('src')
+            spare.load()
+          }
+          return
+        }
+
+        if (spare.getAttribute('src') !== target.src) {
+          spare.src = target.src
+          spare.load()
+        }
+      })
+    }, PREFETCH_DELAY)
+
+    return () => window.clearTimeout(timeout)
+  }, [committedIndex, tracks, isBuffering])
 
   useEffect(() => {
     if (tracks.length === 0) {
