@@ -47,12 +47,38 @@ export function useAudioPlayer(tracks: Track[]) {
       const handleTimeUpdate = () => {
         if (element === audioRef.current) {
           setCurrentTime(element.currentTime)
+
+          const nextDuration = Number.isFinite(element.duration)
+            ? element.duration
+            : 0
+
+          if (nextDuration > 0) {
+            setDuration(nextDuration)
+          }
         }
       }
 
       const handleDurationChange = () => {
         if (element === audioRef.current) {
-          setDuration(Number.isFinite(element.duration) ? element.duration : 0)
+          const nextDuration = Number.isFinite(element.duration)
+            ? element.duration
+            : 0
+
+          if (nextDuration > 0) {
+            setDuration(nextDuration)
+          }
+        }
+      }
+
+      const handleLoadedMetadata = () => {
+        if (element === audioRef.current) {
+          const nextDuration = Number.isFinite(element.duration)
+            ? element.duration
+            : 0
+
+          if (nextDuration > 0) {
+            setDuration(nextDuration)
+          }
         }
       }
 
@@ -109,6 +135,7 @@ export function useAudioPlayer(tracks: Track[]) {
 
       element.addEventListener('timeupdate', handleTimeUpdate)
       element.addEventListener('durationchange', handleDurationChange)
+      element.addEventListener('loadedmetadata', handleLoadedMetadata)
       element.addEventListener('play', handlePlay)
       element.addEventListener('pause', handlePause)
       element.addEventListener('ended', handleEnded)
@@ -117,6 +144,7 @@ export function useAudioPlayer(tracks: Track[]) {
       return {
         handleTimeUpdate,
         handleDurationChange,
+        handleLoadedMetadata,
         handlePlay,
         handlePause,
         handleEnded,
@@ -130,6 +158,7 @@ export function useAudioPlayer(tracks: Track[]) {
         element.pause()
         element.removeEventListener('timeupdate', listener.handleTimeUpdate)
         element.removeEventListener('durationchange', listener.handleDurationChange)
+        element.removeEventListener('loadedmetadata', listener.handleLoadedMetadata)
         element.removeEventListener('play', listener.handlePlay)
         element.removeEventListener('pause', listener.handlePause)
         element.removeEventListener('ended', listener.handleEnded)
@@ -176,6 +205,17 @@ export function useAudioPlayer(tracks: Track[]) {
     }
 
     const activeAudio = audioRef.current
+
+    if (activeAudio) {
+      const activeDuration = activeAudio.duration
+
+      if (Number.isFinite(activeDuration) && activeDuration > 0) {
+        setDuration(activeDuration)
+      }
+
+      const activeTime = activeAudio.currentTime
+      setCurrentTime(Number.isFinite(activeTime) ? activeTime : 0)
+    }
 
     if (autoplayRef.current) {
       autoplayRef.current = false
