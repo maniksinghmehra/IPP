@@ -14,6 +14,41 @@ function isAbortError(error: unknown) {
   )
 }
 
+function getPreloadLimit() {
+  if (typeof navigator === 'undefined') {
+    return PRELOAD_SLOTS
+  }
+
+  if (!navigator.onLine) {
+    return 0
+  }
+
+  const connection = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string }
+    }
+  ).connection
+
+  if (!connection) {
+    return PRELOAD_SLOTS
+  }
+
+  if (connection.saveData) {
+    return 1
+  }
+
+  const effectiveType = connection.effectiveType
+  if (
+    effectiveType === 'slow-2g' ||
+    effectiveType === '2g' ||
+    effectiveType === '3g'
+  ) {
+    return 1
+  }
+
+  return PRELOAD_SLOTS
+}
+
 export function useAudioPlayer(tracks: Track[]) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const spareAudioRefs = useRef<HTMLAudioElement[]>([])
@@ -21,12 +56,14 @@ export function useAudioPlayer(tracks: Track[]) {
   const tracksRef = useRef(tracks)
   const isPlayingRef = useRef(false)
   const autoplayRef = useRef(false)
+  const directionRef = useRef<1 | -1>(1)
   const loadTimeoutRef = useRef<number | null>(null)
   const lastNavigationRef = useRef(0)
 
   const [currentIndex, setCurrentIndex] = useState(0)
   const [committedIndex, setCommittedIndex] = useState(-1)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isBuffering, setIsBuffering] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [trackError, setTrackError] = useState<string | null>(null)
@@ -112,6 +149,24 @@ export function useAudioPlayer(tracks: Track[]) {
         }
       }
 
+      const handleWaiting = () => {
+        if (element === audioRef.current) {
+          setIsBuffering(true)
+        }
+      }
+
+      const handleCanPlay = () => {
+        if (element === audioRef.current) {
+          setIsBuffering(false)
+        }
+      }
+
+      const handlePlaying = () => {
+        if (element === audioRef.current) {
+          setIsBuffering(false)
+        }
+      }
+
       const handleEnded = () => {
         if (element !== audioRef.current) {
           return
@@ -141,12 +196,18 @@ export function useAudioPlayer(tracks: Track[]) {
 
         const nextIndex = (currentIndexRef.current + 1) % playlist.length
         autoplayRef.current = true
+        directionRef.current = 1
         currentIndexRef.current = nextIndex
         setCurrentIndex(nextIndex)
       }
 
       const handleError = () => {
-        if (element !== audioRef.current || !element.error) {
+        if (element !== audioRef.current) {
+          return
+        }
+
+        const mediaError = element.error
+        if (!mediaError || mediaError.code === MediaError.MEDIA_ERR_ABORTED) {
           return
         }
 
@@ -157,6 +218,7 @@ export function useAudioPlayer(tracks: Track[]) {
 
         isPlayingRef.current = false
         setIsPlaying(false)
+        setIsBuffering(false)
         setTrackError(AUDIO_ERROR_MESSAGE)
       }
 
@@ -165,6 +227,9 @@ export function useAudioPlayer(tracks: Track[]) {
       element.addEventListener('loadedmetadata', handleLoadedMetadata)
       element.addEventListener('play', handlePlay)
       element.addEventListener('pause', handlePause)
+      element.addEventListener('waiting', handleWaiting)
+      element.addEventListener('canplay', handleCanPlay)
+      element.addEventListener('playing', handlePlaying)
       element.addEventListener('ended', handleEnded)
       element.addEventListener('error', handleError)
 
@@ -174,6 +239,9 @@ export function useAudioPlayer(tracks: Track[]) {
         handleLoadedMetadata,
         handlePlay,
         handlePause,
+        handleWaiting,
+        handleCanPlay,
+        handlePlaying,
         handleEnded,
         handleError,
       }
@@ -188,6 +256,9 @@ export function useAudioPlayer(tracks: Track[]) {
         element.removeEventListener('loadedmetadata', listener.handleLoadedMetadata)
         element.removeEventListener('play', listener.handlePlay)
         element.removeEventListener('pause', listener.handlePause)
+        element.removeEventListener('waiting', listener.handleWaiting)
+        element.removeEventListener('canplay', listener.handleCanPlay)
+        element.removeEventListener('playing', listener.handlePlaying)
         element.removeEventListener('ended', listener.handleEnded)
         element.removeEventListener('error', listener.handleError)
         element.removeAttribute('src')
@@ -208,6 +279,7 @@ export function useAudioPlayer(tracks: Track[]) {
     setCurrentTime(0)
     setDuration(0)
     setTrackError(null)
+    setIsBuffering(currentTrack !== null)
 
     if (!currentTrack) {
       autoplayRef.current = false
@@ -260,6 +332,10 @@ export function useAudioPlayer(tracks: Track[]) {
       const nextActive = audioRef.current
 
       if (nextActive) {
+        if (nextActive.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+          setIsBuffering(false)
+        }
+
         const activeDuration = nextActive.duration
 
         if (Number.isFinite(activeDuration) && activeDuration > 0) {
@@ -329,11 +405,17 @@ export function useAudioPlayer(tracks: Track[]) {
       return
     }
 
+    const preloadLimit = getPreloadLimit()
     const upcoming: Track[] = []
     const seen = new Set<string>()
 
-    for (let offset = 1; offset <= spares.length; offset += 1) {
-      const track = tracks[(committedIndex + offset) % tracks.length]
+    for (let distance = 1; distance <= preloadLimit; distance += 1) {
+      const offset = directionRef.current * distance
+      const track =
+        tracks[
+          ((committedIndex + offset) % tracks.length + tracks.length) %
+            tracks.length
+        ]
       if (!track || seen.has(track.src)) {
         continue
       }
@@ -450,6 +532,7 @@ export function useAudioPlayer(tracks: Track[]) {
     }
 
     autoplayRef.current = autoplay
+    directionRef.current = index > currentIndexRef.current ? 1 : -1
     currentIndexRef.current = nextIndex
     setCurrentIndex(nextIndex)
   }, [])
@@ -536,6 +619,7 @@ export function useAudioPlayer(tracks: Track[]) {
     currentTrack,
     currentIndex,
     isPlaying,
+    isBuffering,
     currentTime,
     duration,
     trackError,

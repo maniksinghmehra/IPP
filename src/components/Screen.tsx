@@ -16,6 +16,7 @@ interface ScreenProps {
   menuIndex: number
   settingsIndex: number
   isPlaying: boolean
+  isBuffering?: boolean
   currentTime: number
   duration: number
   trackError: string | null
@@ -122,6 +123,7 @@ function NowPlaying({
   currentIndex,
   totalTracks,
   isPlaying,
+  isBuffering,
   currentTime,
   duration,
   onSeek,
@@ -132,6 +134,7 @@ function NowPlaying({
   currentIndex: number
   totalTracks: number
   isPlaying: boolean
+  isBuffering?: boolean
   currentTime: number
   duration: number
   onSeek: (seconds: number) => void
@@ -180,6 +183,9 @@ function NowPlaying({
         </h2>
         <p className="now-playing__artist" title={track.artist}>
           {track.artist}
+        </p>
+        <p className="now-playing__status" aria-hidden="true">
+          {isBuffering ? 'Loading...' : ''}
         </p>
       </div>
 
@@ -526,6 +532,7 @@ export function Screen({
   menuIndex,
   settingsIndex,
   isPlaying,
+  isBuffering,
   currentTime,
   duration,
   trackError,
@@ -618,6 +625,7 @@ export function Screen({
         currentIndex={currentIndex}
         totalTracks={tracks.length}
         isPlaying={isPlaying}
+        isBuffering={isBuffering}
         currentTime={currentTime}
         duration={duration}
         onSeek={onSeek}

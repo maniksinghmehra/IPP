@@ -173,6 +173,17 @@
   white-space: nowrap;
 }
 
+.now-playing__status {
+  min-height: 1.2em;
+  margin: 1px 0 0;
+  color: var(--lcd-ink-soft);
+  font-size: 0.6em;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .lcd-seek {
   flex: none;
   padding-top: 5px;

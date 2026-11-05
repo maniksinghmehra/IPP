@@ -32,6 +32,7 @@ function App() {
     currentTrack,
     currentIndex,
     isPlaying,
+    isBuffering,
     currentTime,
     duration,
     trackError,
@@ -596,9 +597,9 @@ function App() {
   } else if (trackError) {
     announcement = trackError
   } else if (currentTrack) {
-    announcement = `${isPlaying ? 'Playing' : 'Paused'}: ${currentTrack.title} by ${
-      currentTrack.artist
-    }`
+    announcement = `${isBuffering ? 'Loading' : isPlaying ? 'Playing' : 'Paused'}: ${
+      currentTrack.title
+    } by ${currentTrack.artist}`
   }
 
   return (
@@ -623,6 +624,7 @@ function App() {
                 menuIndex={menuIndex}
                 settingsIndex={settingsIndex}
                 isPlaying={isPlaying}
+                isBuffering={isBuffering}
                 currentTime={currentTime}
                 duration={duration}
                 trackError={trackError}
