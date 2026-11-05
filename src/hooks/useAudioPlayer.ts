@@ -4,9 +4,19 @@ import type { Track } from '../types'
 const AUDIO_ERROR_MESSAGE =
   "This track couldn't be loaded. Check that the audio file exists in public/music."
 
+const PRELOAD_SLOTS = 2
+
+function isAbortError(error: unknown) {
+  return (
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    error.name === 'AbortError'
+  )
+}
+
 export function useAudioPlayer(tracks: Track[]) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const preloadAudioRef = useRef<HTMLAudioElement | null>(null)
+  const spareAudioRefs = useRef<HTMLAudioElement[]>([])
   const currentIndexRef = useRef(0)
   const tracksRef = useRef(tracks)
   const isPlayingRef = useRef(false)
@@ -35,17 +45,20 @@ export function useAudioPlayer(tracks: Track[]) {
 
   useEffect(() => {
     const audio = new Audio()
-    const preloadAudio = new Audio()
-    audio.preload = 'auto'
-    preloadAudio.preload = 'auto'
+    const spares = Array.from({ length: PRELOAD_SLOTS }, () => new Audio())
+    const audioElements = [audio, ...spares]
     const saved = typeof window !== 'undefined' ? localStorage.getItem('music-volume') : null
     const v = saved ? parseFloat(saved) : 0.7
-    audio.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7
-    preloadAudio.volume = audio.volume
-    audioRef.current = audio
-    preloadAudioRef.current = preloadAudio
+    const initialVolume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7
 
-    const audioElements = [audio, preloadAudio]
+    for (const element of audioElements) {
+      element.preload = 'auto'
+      element.volume = initialVolume
+    }
+
+    audioRef.current = audio
+    spareAudioRefs.current = spares
+
     const listeners = audioElements.map((element) => {
       const handleTimeUpdate = () => {
         if (element === audioRef.current) {
@@ -113,8 +126,14 @@ export function useAudioPlayer(tracks: Track[]) {
         if (playlist.length === 1) {
           element.currentTime = 0
           setCurrentTime(0)
-          void element.play().catch(() => {
+          void element.play().catch((error) => {
+            if (isAbortError(error) || audioRef.current !== element) {
+              return
+            }
             setIsPlaying(false)
+            if (!element.error) {
+              return
+            }
             setTrackError(AUDIO_ERROR_MESSAGE)
           })
           return
@@ -127,7 +146,12 @@ export function useAudioPlayer(tracks: Track[]) {
       }
 
       const handleError = () => {
-        if (element !== audioRef.current || !element.currentSrc) {
+        if (element !== audioRef.current || !element.error) {
+          return
+        }
+
+        const expected = tracksRef.current[currentIndexRef.current]
+        if (!expected || element.getAttribute('src') !== expected.src) {
           return
         }
 
@@ -170,7 +194,7 @@ export function useAudioPlayer(tracks: Track[]) {
         element.load()
       })
       audioRef.current = null
-      preloadAudioRef.current = null
+      spareAudioRefs.current = []
     }
   }, [])
 
@@ -208,15 +232,26 @@ export function useAudioPlayer(tracks: Track[]) {
         return
       }
 
-      const preloadAudio = preloadAudioRef.current
-      const isPreloaded =
-        preloadAudio?.getAttribute('src') === targetTrack.src &&
-        !preloadAudio.error
+      const spares = spareAudioRefs.current
+      let preloaded: HTMLAudioElement | null = null
+      let preloadedSlot = -1
 
-      if (isPreloaded && preloadAudio) {
+      for (let i = 0; i < spares.length; i += 1) {
+        const spare = spares[i]
+        if (
+          spare.getAttribute('src') === targetTrack.src &&
+          !spare.error
+        ) {
+          preloaded = spare
+          preloadedSlot = i
+          break
+        }
+      }
+
+      if (preloaded && preloadedSlot >= 0) {
         activeAudio.pause()
-        audioRef.current = preloadAudio
-        preloadAudioRef.current = activeAudio
+        audioRef.current = preloaded
+        spares[preloadedSlot] = activeAudio
       } else {
         activeAudio.src = targetTrack.src
         activeAudio.load()
@@ -239,8 +274,14 @@ export function useAudioPlayer(tracks: Track[]) {
 
       if (autoplayRef.current) {
         autoplayRef.current = false
-        void nextActive?.play().catch(() => {
+        void nextActive?.play().catch((error) => {
+          if (isAbortError(error) || audioRef.current !== nextActive) {
+            return
+          }
           setIsPlaying(false)
+          if (!nextActive?.error) {
+            return
+          }
           setTrackError(AUDIO_ERROR_MESSAGE)
         })
       }
@@ -256,9 +297,10 @@ export function useAudioPlayer(tracks: Track[]) {
     const isRapidNavigation = now - lastNavigationRef.current < 220
     lastNavigationRef.current = now
 
-    const preloadAudio = preloadAudioRef.current
-    const alreadyPreloaded =
-      preloadAudio?.getAttribute('src') === targetTrack.src && !preloadAudio.error
+    const alreadyPreloaded = spareAudioRefs.current.some(
+      (spare) =>
+        spare.getAttribute('src') === targetTrack.src && !spare.error,
+    )
 
     if (alreadyPreloaded || !isRapidNavigation) {
       commitTrack()
@@ -275,27 +317,47 @@ export function useAudioPlayer(tracks: Track[]) {
   }, [currentTrack, currentIndex])
 
   useEffect(() => {
-    const preloadAudio = preloadAudioRef.current
+    const spares = spareAudioRefs.current
     const currentAudio = audioRef.current
 
-    if (!preloadAudio || !currentAudio || tracks.length < 2 || committedIndex < 0) {
-      if (preloadAudio) {
-        preloadAudio.pause()
-        preloadAudio.removeAttribute('src')
-        preloadAudio.load()
+    if (!currentAudio || tracks.length < 2 || committedIndex < 0) {
+      for (const spare of spares) {
+        spare.pause()
+        spare.removeAttribute('src')
+        spare.load()
       }
       return
     }
 
-    const nextTrack = tracks[(committedIndex + 1) % tracks.length]
-    if (!nextTrack) {
-      return
+    const upcoming: Track[] = []
+    const seen = new Set<string>()
+
+    for (let offset = 1; offset <= spares.length; offset += 1) {
+      const track = tracks[(committedIndex + offset) % tracks.length]
+      if (!track || seen.has(track.src)) {
+        continue
+      }
+      seen.add(track.src)
+      upcoming.push(track)
     }
 
-    if (preloadAudio.getAttribute('src') !== nextTrack.src) {
-      preloadAudio.src = nextTrack.src
-      preloadAudio.load()
-    }
+    spares.forEach((spare, index) => {
+      const target = upcoming[index]
+
+      if (!target) {
+        if (spare.getAttribute('src')) {
+          spare.pause()
+          spare.removeAttribute('src')
+          spare.load()
+        }
+        return
+      }
+
+      if (spare.getAttribute('src') !== target.src) {
+        spare.src = target.src
+        spare.load()
+      }
+    })
   }, [committedIndex, tracks])
 
   useEffect(() => {
@@ -327,9 +389,15 @@ export function useAudioPlayer(tracks: Track[]) {
         audio.load()
       }
       await audio.play()
-    } catch {
+    } catch (error) {
+      if (isAbortError(error) || audioRef.current !== audio) {
+        return
+      }
       isPlayingRef.current = false
       setIsPlaying(false)
+      if (!audio.error) {
+        return
+      }
       setTrackError(AUDIO_ERROR_MESSAGE)
     }
   }, [])
@@ -366,8 +434,14 @@ export function useAudioPlayer(tracks: Track[]) {
         audio.currentTime = 0
         setCurrentTime(0)
         if (autoplay) {
-          void audio.play().catch(() => {
+          void audio.play().catch((error) => {
+            if (isAbortError(error) || audioRef.current !== audio) {
+              return
+            }
             setIsPlaying(false)
+            if (!audio.error) {
+              return
+            }
             setTrackError(AUDIO_ERROR_MESSAGE)
           })
         }
@@ -433,7 +507,7 @@ export function useAudioPlayer(tracks: Track[]) {
     if (typeof window !== 'undefined') {
       localStorage.setItem('music-volume', clamped.toString())
     }
-    for (const audio of [audioRef.current, preloadAudioRef.current]) {
+    for (const audio of [audioRef.current, ...spareAudioRefs.current]) {
       if (audio) {
         audio.volume = clamped
       }
@@ -447,7 +521,7 @@ export function useAudioPlayer(tracks: Track[]) {
         if (typeof window !== 'undefined') {
           localStorage.setItem('music-volume', clamped.toString())
         }
-        for (const audio of [audioRef.current, preloadAudioRef.current]) {
+        for (const audio of [audioRef.current, ...spareAudioRefs.current]) {
           if (audio) {
             audio.volume = clamped
           }
