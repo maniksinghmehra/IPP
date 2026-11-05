@@ -6,6 +6,7 @@ const AUDIO_ERROR_MESSAGE =
 
 export function useAudioPlayer(tracks: Track[]) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const preloadAudioRef = useRef<HTMLAudioElement | null>(null)
   const currentIndexRef = useRef(0)
   const tracksRef = useRef(tracks)
   const isPlayingRef = useRef(false)
@@ -31,81 +32,113 @@ export function useAudioPlayer(tracks: Track[]) {
 
   useEffect(() => {
     const audio = new Audio()
-    audio.preload = 'metadata'
+    const preloadAudio = new Audio()
+    audio.preload = 'auto'
+    preloadAudio.preload = 'auto'
     const saved = typeof window !== 'undefined' ? localStorage.getItem('music-volume') : null
     const v = saved ? parseFloat(saved) : 0.7
     audio.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7
+    preloadAudio.volume = audio.volume
     audioRef.current = audio
+    preloadAudioRef.current = preloadAudio
 
-    const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime)
-    }
-
-    const handleDurationChange = () => {
-      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
-    }
-
-    const handlePlay = () => {
-      isPlayingRef.current = true
-      setIsPlaying(true)
-    }
-
-    const handlePause = () => {
-      isPlayingRef.current = false
-      setIsPlaying(false)
-    }
-
-    const handleEnded = () => {
-      const playlist = tracksRef.current
-
-      if (playlist.length === 0) {
-        return
+    const audioElements = [audio, preloadAudio]
+    const listeners = audioElements.map((element) => {
+      const handleTimeUpdate = () => {
+        if (element === audioRef.current) {
+          setCurrentTime(element.currentTime)
+        }
       }
 
-      if (playlist.length === 1) {
-        audio.currentTime = 0
-        setCurrentTime(0)
-        void audio.play().catch(() => {
+      const handleDurationChange = () => {
+        if (element === audioRef.current) {
+          setDuration(Number.isFinite(element.duration) ? element.duration : 0)
+        }
+      }
+
+      const handlePlay = () => {
+        if (element === audioRef.current) {
+          isPlayingRef.current = true
+          setIsPlaying(true)
+        }
+      }
+
+      const handlePause = () => {
+        if (element === audioRef.current) {
+          isPlayingRef.current = false
           setIsPlaying(false)
-          setTrackError(AUDIO_ERROR_MESSAGE)
-        })
-        return
+        }
       }
 
-      const nextIndex = (currentIndexRef.current + 1) % playlist.length
-      autoplayRef.current = true
-      currentIndexRef.current = nextIndex
-      setCurrentIndex(nextIndex)
-    }
+      const handleEnded = () => {
+        if (element !== audioRef.current) {
+          return
+        }
 
-    const handleError = () => {
-      if (!audio.currentSrc) {
-        return
+        const playlist = tracksRef.current
+
+        if (playlist.length === 0) {
+          return
+        }
+
+        if (playlist.length === 1) {
+          element.currentTime = 0
+          setCurrentTime(0)
+          void element.play().catch(() => {
+            setIsPlaying(false)
+            setTrackError(AUDIO_ERROR_MESSAGE)
+          })
+          return
+        }
+
+        const nextIndex = (currentIndexRef.current + 1) % playlist.length
+        autoplayRef.current = true
+        currentIndexRef.current = nextIndex
+        setCurrentIndex(nextIndex)
       }
 
-      isPlayingRef.current = false
-      setIsPlaying(false)
-      setTrackError(AUDIO_ERROR_MESSAGE)
-    }
+      const handleError = () => {
+        if (element !== audioRef.current || !element.currentSrc) {
+          return
+        }
 
-    audio.addEventListener('timeupdate', handleTimeUpdate)
-    audio.addEventListener('durationchange', handleDurationChange)
-    audio.addEventListener('play', handlePlay)
-    audio.addEventListener('pause', handlePause)
-    audio.addEventListener('ended', handleEnded)
-    audio.addEventListener('error', handleError)
+        isPlayingRef.current = false
+        setIsPlaying(false)
+        setTrackError(AUDIO_ERROR_MESSAGE)
+      }
+
+      element.addEventListener('timeupdate', handleTimeUpdate)
+      element.addEventListener('durationchange', handleDurationChange)
+      element.addEventListener('play', handlePlay)
+      element.addEventListener('pause', handlePause)
+      element.addEventListener('ended', handleEnded)
+      element.addEventListener('error', handleError)
+
+      return {
+        handleTimeUpdate,
+        handleDurationChange,
+        handlePlay,
+        handlePause,
+        handleEnded,
+        handleError,
+      }
+    })
 
     return () => {
-      audio.pause()
-      audio.removeEventListener('timeupdate', handleTimeUpdate)
-      audio.removeEventListener('durationchange', handleDurationChange)
-      audio.removeEventListener('play', handlePlay)
-      audio.removeEventListener('pause', handlePause)
-      audio.removeEventListener('ended', handleEnded)
-      audio.removeEventListener('error', handleError)
-      audio.removeAttribute('src')
-      audio.load()
+      audioElements.forEach((element, index) => {
+        const listener = listeners[index]
+        element.pause()
+        element.removeEventListener('timeupdate', listener.handleTimeUpdate)
+        element.removeEventListener('durationchange', listener.handleDurationChange)
+        element.removeEventListener('play', listener.handlePlay)
+        element.removeEventListener('pause', listener.handlePause)
+        element.removeEventListener('ended', listener.handleEnded)
+        element.removeEventListener('error', listener.handleError)
+        element.removeAttribute('src')
+        element.load()
+      })
       audioRef.current = null
+      preloadAudioRef.current = null
     }
   }, [])
 
@@ -129,17 +162,53 @@ export function useAudioPlayer(tracks: Track[]) {
       return
     }
 
-    audio.src = currentTrack.src
-    audio.load()
+    const preloadAudio = preloadAudioRef.current
+    const isPreloaded =
+      preloadAudio?.getAttribute('src') === currentTrack.src && !preloadAudio.error
+
+    if (isPreloaded && preloadAudio) {
+      audio.pause()
+      audioRef.current = preloadAudio
+      preloadAudioRef.current = audio
+    } else {
+      audio.src = currentTrack.src
+      audio.load()
+    }
+
+    const activeAudio = audioRef.current
 
     if (autoplayRef.current) {
       autoplayRef.current = false
-      void audio.play().catch(() => {
+      void activeAudio?.play().catch(() => {
         setIsPlaying(false)
         setTrackError(AUDIO_ERROR_MESSAGE)
       })
     }
   }, [currentTrack, currentIndex])
+
+  useEffect(() => {
+    const preloadAudio = preloadAudioRef.current
+    const currentAudio = audioRef.current
+
+    if (!preloadAudio || !currentAudio || tracks.length < 2 || !currentTrack) {
+      if (preloadAudio) {
+        preloadAudio.pause()
+        preloadAudio.removeAttribute('src')
+        preloadAudio.load()
+      }
+      return
+    }
+
+    const nextTrack = tracks[(currentIndex + 1) % tracks.length]
+    if (!nextTrack) {
+      return
+    }
+
+    if (preloadAudio.getAttribute('src') !== nextTrack.src) {
+      preloadAudio.src = nextTrack.src
+      preloadAudio.load()
+    }
+  }, [currentIndex, currentTrack, tracks])
 
   useEffect(() => {
     if (tracks.length === 0) {
@@ -275,9 +344,10 @@ export function useAudioPlayer(tracks: Track[]) {
     if (typeof window !== 'undefined') {
       localStorage.setItem('music-volume', clamped.toString())
     }
-    const audio = audioRef.current
-    if (audio) {
-      audio.volume = clamped
+    for (const audio of [audioRef.current, preloadAudioRef.current]) {
+      if (audio) {
+        audio.volume = clamped
+      }
     }
   }, [])
 
@@ -288,9 +358,10 @@ export function useAudioPlayer(tracks: Track[]) {
         if (typeof window !== 'undefined') {
           localStorage.setItem('music-volume', clamped.toString())
         }
-        const audio = audioRef.current
-        if (audio) {
-          audio.volume = clamped
+        for (const audio of [audioRef.current, preloadAudioRef.current]) {
+          if (audio) {
+            audio.volume = clamped
+          }
         }
         return clamped
       })
