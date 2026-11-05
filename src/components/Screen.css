@@ -5,6 +5,11 @@
   --lcd-ink-soft: #536274;
   --lcd-line: #536274;
   --lcd-select: #73777D;
+  --lcd-font-size: clamp(
+    14px,
+    calc(var(--device-width, 400px) * 0.04),
+    24px
+  );
 
   position: relative;
   width: 100%;
@@ -14,7 +19,7 @@
   color: var(--lcd-ink);
   background: radial-gradient(ellipse at top, #d0e0f4 0%, var(--lcd-bg) 80%);
   font-family: 'Chicago', 'Chicago LCD', monospace;
-  font-size: clamp(13px, 2.2vw, 16px);
+  font-size: var(--lcd-font-size);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   font-synthesis: none;
@@ -47,7 +52,7 @@
   height: 100%;
   flex-direction: column;
   padding: 3px 4px 2px;
-  font-size: clamp(13px, 2.2vw, 16px);
+  font-size: 1em;
   line-height: 1.05;
 }
 
@@ -61,7 +66,7 @@
   border-bottom: 1px solid var(--lcd-line);
   margin-bottom: 2px;
   color: var(--lcd-ink);
-  font-size: clamp(13px, 2.1vw, 16px);
+  font-size: 1em;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1;
@@ -136,7 +141,7 @@
 .now-playing__index {
   margin: 0 0 2px;
   color: var(--lcd-ink-soft);
-  font-size: clamp(9px, 1.4vw, 11px);
+  font-size: 0.7em;
   font-weight: 400;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -148,7 +153,7 @@
   overflow: hidden;
   margin: 0;
   color: var(--lcd-ink);
-  font-size: clamp(13px, 2.2vw, 15px);
+  font-size: 0.95em;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.12;
@@ -161,7 +166,7 @@
   overflow: hidden;
   margin: 1px 0 0;
   color: var(--lcd-ink-soft);
-  font-size: clamp(11px, 1.8vw, 13px);
+  font-size: 0.82em;
   font-weight: 400;
   line-height: 1.12;
   text-overflow: ellipsis;
@@ -243,7 +248,7 @@
   justify-content: space-between;
   margin-top: 0;
   color: var(--lcd-ink-soft);
-  font-size: 9px;
+  font-size: 0.58em;
   font-weight: 400;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -296,7 +301,7 @@
 }
 
 .lcd-playlist-name {
-  font-size: clamp(13px, 2.2vw, 16px);
+  font-size: 1em;
   color: var(--lcd-ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -304,7 +309,7 @@
 }
 
 .lcd-playlist-count {
-  font-size: clamp(11px, 1.8vw, 14px);
+  font-size: 0.88em;
   color: var(--lcd-ink-soft);
 }
 
@@ -333,7 +338,7 @@
 }
 
 .lcd-volume-indicator__label {
-  font-size: clamp(10px, 1.6vw, 12px);
+  font-size: 0.72em;
   text-align: center;
 }
 
@@ -417,7 +422,7 @@
 .lcd-row--menu,
 .lcd-row--setting {
   min-height: clamp(18px, 3vw, 24px);
-  font-size: clamp(14px, 2.4vw, 18px);
+  font-size: 1.15em;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
@@ -443,12 +448,12 @@
 
 .lcd-row__number {
   display: inline-flex;
-  width: clamp(14px, 2.2vw, 18px);
+  width: 1.25em;
   flex: none;
   align-items: center;
   justify-content: flex-start;
   color: var(--lcd-ink-soft);
-  font-size: clamp(10px, 1.6vw, 12px);
+  font-size: 0.75em;
   font-weight: 400;
   letter-spacing: 0.02em;
 }
@@ -474,7 +479,7 @@
 
 .lcd-row__title {
   overflow: hidden;
-  font-size: clamp(13px, 2.2vw, 16px);
+  font-size: 1em;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.1;
@@ -485,7 +490,7 @@
 .lcd-row__artist {
   overflow: hidden;
   color: var(--lcd-ink-soft);
-  font-size: clamp(11px, 1.8vw, 14px);
+  font-size: 0.88em;
   font-weight: 400;
   line-height: 1.1;
   text-overflow: ellipsis;
@@ -499,7 +504,7 @@
 .lcd-row__value {
   flex: none;
   color: var(--lcd-ink-soft);
-  font-size: 9px;
+  font-size: 0.45em;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -516,7 +521,7 @@
   padding-top: 4px;
   border-top: 1px solid var(--lcd-line);
   color: var(--lcd-ink-soft);
-  font-size: 8px;
+  font-size: 0.52em;
   font-weight: 400;
   letter-spacing: 0.04em;
   line-height: 1.2;
@@ -526,7 +531,7 @@
 
 .lcd-note {
   color: var(--lcd-ink);
-  font-size: 9px;
+  font-size: 0.58em;
   letter-spacing: 0.02em;
   text-transform: none;
 }
@@ -550,7 +555,7 @@
   border: 1px solid var(--lcd-ink-soft);
   border-radius: 50%;
   color: var(--lcd-ink);
-  font-size: 12px;
+  font-size: 0.75em;
   font-weight: 700;
   line-height: 1;
 }
@@ -558,7 +563,7 @@
 .lcd-message h2 {
   margin: 0 0 4px;
   color: var(--lcd-ink);
-  font-size: 16px;
+  font-size: 1em;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1.15;
@@ -568,7 +573,7 @@
   max-width: 98%;
   margin: 0;
   color: var(--lcd-ink-soft);
-  font-size: 10px;
+  font-size: 0.65em;
   font-weight: 400;
   line-height: 1.35;
 }
@@ -579,7 +584,7 @@
   color: var(--lcd-ink);
   background: rgba(22, 38, 45, 0.1);
   font-family: inherit;
-  font-size: 9px;
+  font-size: 0.58em;
 }
 
 .lcd-message__path {
@@ -591,7 +596,7 @@
   border: 1px solid rgba(22, 38, 45, 0.18);
   background: rgba(255, 255, 255, 0.18);
   color: var(--lcd-ink);
-  font-size: 9px;
+  font-size: 0.58em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -613,7 +618,7 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
   cursor: pointer;
   font: inherit;
-  font-size: 9px;
+  font-size: 0.58em;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -655,7 +660,7 @@
   justify-content: center;
   gap: 8px;
   color: var(--lcd-ink-soft);
-  font-size: 10px;
+  font-size: 0.65em;
   font-weight: 400;
   letter-spacing: 0.02em;
 }
