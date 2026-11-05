@@ -6,16 +6,14 @@ The player includes a working menu, playlist and song views, a settings screen, 
 
 ## Run locally
 
-You will need Node.js 20.19+ (or 22.12+) and npm, plus [Git LFS](https://git-lfs.com) to download the songs.
+You will need Node.js 20.19+ (or 22.12+) and npm.
 
 ```bash
-git lfs install
-git lfs pull
 npm install
 npm run dev
 ```
 
-The audio files are stored with Git LFS. If `git lfs` is not installed when you clone, `public/music/*.mp3` will be tiny pointer files instead of audio, and the player will show track errors. Run `git lfs install` once, then `git lfs pull`.
+The audio files are committed directly to the repository, so no Git LFS setup is required.
 
 Open the local URL printed by Vite (usually `http://localhost:5173`).
 
@@ -45,7 +43,7 @@ The current playlist is named **`for astha`** and uses the audio files in `publi
 The order of the array is the playlist order. Each `src` starts with `/music/` and then uses the exact filename from `public/music/`. Do not include the numeric filename suffix in `title`.
 
 - Vite serves `public/music/` during development, and the production build copies it to `dist/music/`.
-- The MP3s are stored with Git LFS, so run `git lfs pull` after cloning (see [Run locally](#run-locally)).
+- Audio files are committed directly, so static hosts such as Vercel serve the real MP3s without Git LFS.
 - File paths are case-sensitive on many systems, so match the filename exactly.
 - The browser must support the audio format. MP3, M4A/AAC, OGG, and WAV have good support in current browsers.
 - If `playlist.json` is empty, missing, or invalid, the screen shows a friendly error with a reload button. If an audio file cannot load, the screen shows a track error with retry and next actions.
