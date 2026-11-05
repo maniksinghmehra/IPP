@@ -353,21 +353,6 @@
   background: var(--lcd-ink);
 }
 
-.lcd-volume-indicator__steps {
-  display: flex;
-  gap: 2px;
-}
-
-.lcd-volume-indicator__step {
-  flex: 1;
-  height: 4px;
-  background: rgba(83, 98, 116, 0.25);
-}
-
-.lcd-volume-indicator__step.is-active {
-  background: var(--lcd-ink);
-}
-
 .lcd-menu,
 .lcd-list {
   display: flex;

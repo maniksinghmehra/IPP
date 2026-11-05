@@ -147,7 +147,6 @@ function NowPlaying({
   const totalNumber = totalTracks.toString().padStart(2, '0')
 
   const volumePercent = Math.round((volume ?? 0.7) * 100)
-  const volumeBars = Math.max(0, Math.min(10, Math.round((volume ?? 0.7) * 10)))
 
   return (
     <div className="lcd-page lcd-page--now">
@@ -164,14 +163,6 @@ function NowPlaying({
               className="lcd-volume-indicator__fill"
               style={{ width: `${volumePercent}%` }}
             />
-          </div>
-          <div className="lcd-volume-indicator__steps">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <span
-                key={i}
-                className={`lcd-volume-indicator__step${i < volumeBars ? ' is-active' : ''}`}
-              />
-            ))}
           </div>
         </div>
       ) : null}

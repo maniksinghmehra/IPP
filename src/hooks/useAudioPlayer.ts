@@ -11,8 +11,11 @@ export function useAudioPlayer(tracks: Track[]) {
   const tracksRef = useRef(tracks)
   const isPlayingRef = useRef(false)
   const autoplayRef = useRef(false)
+  const loadTimeoutRef = useRef<number | null>(null)
+  const lastNavigationRef = useRef(0)
 
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [committedIndex, setCommittedIndex] = useState(-1)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -181,48 +184,93 @@ export function useAudioPlayer(tracks: Track[]) {
     setCurrentTime(0)
     setDuration(0)
     setTrackError(null)
-    setIsPlaying(false)
-    isPlayingRef.current = false
 
     if (!currentTrack) {
       autoplayRef.current = false
+      if (loadTimeoutRef.current !== null) {
+        window.clearTimeout(loadTimeoutRef.current)
+        loadTimeoutRef.current = null
+      }
       audio.removeAttribute('src')
       audio.load()
       return
     }
 
-    const preloadAudio = preloadAudioRef.current
-    const isPreloaded =
-      preloadAudio?.getAttribute('src') === currentTrack.src && !preloadAudio.error
+    const targetTrack = currentTrack
+    const targetIndex = currentIndex
 
-    if (isPreloaded && preloadAudio) {
-      audio.pause()
-      audioRef.current = preloadAudio
-      preloadAudioRef.current = audio
-    } else {
-      audio.src = currentTrack.src
-      audio.load()
-    }
+    const commitTrack = () => {
+      loadTimeoutRef.current = null
 
-    const activeAudio = audioRef.current
+      const activeAudio = audioRef.current
 
-    if (activeAudio) {
-      const activeDuration = activeAudio.duration
-
-      if (Number.isFinite(activeDuration) && activeDuration > 0) {
-        setDuration(activeDuration)
+      if (!activeAudio) {
+        return
       }
 
-      const activeTime = activeAudio.currentTime
-      setCurrentTime(Number.isFinite(activeTime) ? activeTime : 0)
+      const preloadAudio = preloadAudioRef.current
+      const isPreloaded =
+        preloadAudio?.getAttribute('src') === targetTrack.src &&
+        !preloadAudio.error
+
+      if (isPreloaded && preloadAudio) {
+        activeAudio.pause()
+        audioRef.current = preloadAudio
+        preloadAudioRef.current = activeAudio
+      } else {
+        activeAudio.src = targetTrack.src
+        activeAudio.load()
+      }
+
+      const nextActive = audioRef.current
+
+      if (nextActive) {
+        const activeDuration = nextActive.duration
+
+        if (Number.isFinite(activeDuration) && activeDuration > 0) {
+          setDuration(activeDuration)
+        }
+
+        const activeTime = nextActive.currentTime
+        setCurrentTime(Number.isFinite(activeTime) ? activeTime : 0)
+      }
+
+      setCommittedIndex(targetIndex)
+
+      if (autoplayRef.current) {
+        autoplayRef.current = false
+        void nextActive?.play().catch(() => {
+          setIsPlaying(false)
+          setTrackError(AUDIO_ERROR_MESSAGE)
+        })
+      }
     }
 
-    if (autoplayRef.current) {
-      autoplayRef.current = false
-      void activeAudio?.play().catch(() => {
-        setIsPlaying(false)
-        setTrackError(AUDIO_ERROR_MESSAGE)
-      })
+    if (loadTimeoutRef.current !== null) {
+      window.clearTimeout(loadTimeoutRef.current)
+      loadTimeoutRef.current = null
+    }
+
+    const now =
+      typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const isRapidNavigation = now - lastNavigationRef.current < 220
+    lastNavigationRef.current = now
+
+    const preloadAudio = preloadAudioRef.current
+    const alreadyPreloaded =
+      preloadAudio?.getAttribute('src') === targetTrack.src && !preloadAudio.error
+
+    if (alreadyPreloaded || !isRapidNavigation) {
+      commitTrack()
+    } else {
+      loadTimeoutRef.current = window.setTimeout(commitTrack, 200)
+    }
+
+    return () => {
+      if (loadTimeoutRef.current !== null) {
+        window.clearTimeout(loadTimeoutRef.current)
+        loadTimeoutRef.current = null
+      }
     }
   }, [currentTrack, currentIndex])
 
@@ -230,7 +278,7 @@ export function useAudioPlayer(tracks: Track[]) {
     const preloadAudio = preloadAudioRef.current
     const currentAudio = audioRef.current
 
-    if (!preloadAudio || !currentAudio || tracks.length < 2 || !currentTrack) {
+    if (!preloadAudio || !currentAudio || tracks.length < 2 || committedIndex < 0) {
       if (preloadAudio) {
         preloadAudio.pause()
         preloadAudio.removeAttribute('src')
@@ -239,7 +287,7 @@ export function useAudioPlayer(tracks: Track[]) {
       return
     }
 
-    const nextTrack = tracks[(currentIndex + 1) % tracks.length]
+    const nextTrack = tracks[(committedIndex + 1) % tracks.length]
     if (!nextTrack) {
       return
     }
@@ -248,7 +296,7 @@ export function useAudioPlayer(tracks: Track[]) {
       preloadAudio.src = nextTrack.src
       preloadAudio.load()
     }
-  }, [currentIndex, currentTrack, tracks])
+  }, [committedIndex, tracks])
 
   useEffect(() => {
     if (tracks.length === 0) {
@@ -296,6 +344,7 @@ export function useAudioPlayer(tracks: Track[]) {
     if (audio.paused) {
       void startPlayback()
     } else {
+      autoplayRef.current = false
       audio.pause()
     }
   }, [startPlayback])
