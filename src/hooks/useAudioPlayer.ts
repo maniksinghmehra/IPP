@@ -90,7 +90,7 @@ export function useAudioPlayer(tracks: Track[]) {
     const initialVolume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7
 
     for (const element of audioElements) {
-      element.preload = 'auto'
+      element.preload = element === audio ? 'auto' : 'metadata'
       element.volume = initialVolume
     }
 
@@ -474,6 +474,7 @@ export function useAudioPlayer(tracks: Track[]) {
         }
 
         if (spare.getAttribute('src') !== target.src) {
+          spare.preload = 'metadata'
           spare.src = target.src
           spare.load()
         }
