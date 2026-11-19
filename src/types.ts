@@ -6,6 +6,11 @@ export interface Track {
 
 export type PlaylistStatus = 'loading' | 'ready' | 'empty' | 'error'
 
-export type MenuView = 'nowPlaying' | 'playlist' | 'songs' | 'settings'
+export type MenuView =
+  | 'nowPlaying'
+  | 'playlist'
+  | 'artists'
+  | 'songs'
+  | 'settings'
 
 export type ScreenView = 'menu' | MenuView

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { MENU_ITEMS } from '../menu'
 import { PLAYLIST_NAME } from '../playlist'
@@ -11,6 +11,9 @@ interface ScreenProps {
   status: PlaylistStatus
   view: ScreenView
   tracks: Track[]
+  artists: string[]
+  artistIndex: number
+  artistFilter: string | null
   currentIndex: number
   selectedIndex: number
   menuIndex: number
@@ -29,6 +32,7 @@ interface ScreenProps {
   onPlaylistSubViewChange?: (view: 'playlists' | 'songs') => void
   onSelectTrack: (index: number) => void
   onSelectMenu: (target: MenuView, index: number) => void
+  onSelectArtist: (index: number) => void
   onSelectSetting: (index: number) => void
   onSeek: (seconds: number) => void
   onRetry: () => void
@@ -101,9 +105,10 @@ function ChevronIcon() {
   )
 }
 
-function StatusBar({ label, exactLabel }: StatusBarProps) {
+function StatusBar({ label, exactLabel, icon }: StatusBarProps) {
   return (
     <div className="lcd-status">
+      {icon ? <span className="lcd-status__icon">{icon}</span> : null}
       <span
         className={`lcd-status__label${
           exactLabel ? ' lcd-status__label--exact' : ''
@@ -117,6 +122,39 @@ function StatusBar({ label, exactLabel }: StatusBarProps) {
     </div>
   )
 }
+
+const NowPlayingInfo = memo(function NowPlayingInfo({
+  track,
+  trackNumber,
+  totalNumber,
+  isBuffering,
+}: {
+  track: Track
+  trackNumber: string
+  totalNumber: string
+  isBuffering?: boolean
+}) {
+  return (
+    <div className="now-playing__info">
+      <p className="now-playing__index">
+        Track {trackNumber} of {totalNumber}
+      </p>
+      <h2 className="now-playing__title" title={track.title}>
+        {track.title}
+      </h2>
+      <p className="now-playing__artist" title={track.artist}>
+        {track.artist}
+      </p>
+      <p
+        className={`now-playing__status${isBuffering ? '' : ' is-hidden'}`}
+        role="status"
+        aria-hidden={isBuffering ? undefined : true}
+      >
+        {isBuffering ? 'Loading...' : '\u00A0'}
+      </p>
+    </div>
+  )
+})
 
 function NowPlaying({
   track,
@@ -141,15 +179,43 @@ function NowPlaying({
   volume?: number
   showVolumeIndicator?: boolean
 }) {
+  const [scrubbing, setScrubbing] = useState(false)
+  const [scrubTime, setScrubTime] = useState(0)
+  const scrubbingRef = useRef(false)
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0
   const safeCurrentTime = Math.min(Math.max(currentTime, 0), safeDuration || 0)
-  const remaining = Math.max(0, safeDuration - safeCurrentTime)
-  const progress = safeDuration > 0 ? (safeCurrentTime / safeDuration) * 100 : 0
+  const displayTime = scrubbing ? scrubTime : safeCurrentTime
+  const remaining = Math.max(0, safeDuration - displayTime)
+  const progress = safeDuration > 0 ? (displayTime / safeDuration) * 100 : 0
   const progressStyle = { '--seek-progress': `${progress}%` } as CSSProperties
   const trackNumber = (currentIndex + 1).toString().padStart(2, '0')
   const totalNumber = totalTracks.toString().padStart(2, '0')
 
   const volumePercent = Math.round((volume ?? 0.7) * 100)
+
+  const beginScrub = () => {
+    scrubbingRef.current = true
+    setScrubTime(safeCurrentTime)
+    setScrubbing(true)
+  }
+
+  const updateScrub = (value: number) => {
+    if (scrubbingRef.current) {
+      setScrubTime(value)
+    } else {
+      onSeek(value)
+    }
+  }
+
+  const endScrub = (value: number) => {
+    if (!scrubbingRef.current) {
+      return
+    }
+    scrubbingRef.current = false
+    setScrubTime(value)
+    setScrubbing(false)
+    onSeek(value)
+  }
 
   return (
     <div className="lcd-page lcd-page--now">
@@ -170,23 +236,17 @@ function NowPlaying({
         </div>
       ) : null}
 
-      <div className="lcd-cover lcd-cover--now">
-        <LcdCover src="/for-astha.jpg" alt="for astha cover" size={72} />
-      </div>
-
       <div className="now-playing">
-        <p className="now-playing__index">
-          TRACK {trackNumber} / {totalNumber}
-        </p>
-        <h2 className="now-playing__title" title={track.title}>
-          {track.title}
-        </h2>
-        <p className="now-playing__artist" title={track.artist}>
-          {track.artist}
-        </p>
-        <p className="now-playing__status" aria-hidden="true">
-          {isBuffering ? 'Loading...' : ''}
-        </p>
+        <div className="lcd-cover lcd-cover--now">
+          <LcdCover src="/for-astha.jpg" alt="for astha cover" size={112} />
+        </div>
+
+        <NowPlayingInfo
+          track={track}
+          trackNumber={trackNumber}
+          totalNumber={totalNumber}
+          isBuffering={isBuffering}
+        />
       </div>
 
       <div className="lcd-seek">
@@ -200,16 +260,22 @@ function NowPlaying({
           min="0"
           max={safeDuration || 0}
           step="0.1"
-          value={safeCurrentTime}
+          value={displayTime}
           style={progressStyle}
-          onChange={(event) => onSeek(Number(event.target.value))}
+          onPointerDown={beginScrub}
+          onChange={(event) => updateScrub(Number(event.target.value))}
+          onPointerUp={(event) => endScrub(Number(event.currentTarget.value))}
+          onPointerCancel={(event) =>
+            endScrub(Number(event.currentTarget.value))
+          }
+          onBlur={(event) => endScrub(Number(event.currentTarget.value))}
           disabled={safeDuration === 0}
-          aria-valuetext={`Elapsed ${formatTime(safeCurrentTime)}, ${formatTime(
+          aria-valuetext={`Elapsed ${formatTime(displayTime)}, ${formatTime(
             remaining,
           )} remaining`}
         />
         <div className="lcd-seek__times">
-          <span>{formatTime(safeCurrentTime)}</span>
+          <span>{formatTime(displayTime)}</span>
           <span>{safeDuration > 0 ? `-${formatTime(remaining)}` : '--:--'}</span>
         </div>
       </div>
@@ -241,7 +307,7 @@ function MenuScreen({
                 onClick={() => onSelectMenu(item.view, index)}
               >
                 <span className="lcd-row__label">{item.label}</span>
-                {item.label.includes('›') ? <ChevronIcon /> : null}
+                {item.chevron ? <ChevronIcon /> : null}
               </button>
             </li>
           )

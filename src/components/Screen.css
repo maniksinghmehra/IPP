@@ -4,7 +4,7 @@
   --lcd-ink: #536274;
   --lcd-ink-soft: #536274;
   --lcd-line: #536274;
-  --lcd-select: #73777D;
+  --lcd-select: #536274;
   --lcd-font-size: clamp(
     14px,
     calc(var(--device-width, 400px) * 0.04),
@@ -18,15 +18,17 @@
   border-radius: 1px;
   color: var(--lcd-ink);
   background: radial-gradient(ellipse at top, #d0e0f4 0%, var(--lcd-bg) 80%);
-  font-family: 'Chicago', 'Chicago LCD', monospace;
+  font-family:
+    'Arimo', 'Helvetica Neue', Helvetica, Arial, 'Segoe UI', Roboto,
+    ui-sans-serif, system-ui, sans-serif;
   font-size: var(--lcd-font-size);
-  font-weight: 700;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   font-synthesis: none;
-  font-kerning: none;
-  letter-spacing: 0;
-  text-rendering: optimizeSpeed;
-  -webkit-font-smoothing: none;
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .screen--backlight-low {
@@ -67,9 +69,9 @@
   margin-bottom: 2px;
   color: var(--lcd-ink);
   font-size: 1em;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 1.2;
 }
 
 .lcd-status__label {
@@ -90,8 +92,19 @@
   display: none;
 }
 
+.lcd-status__icon {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  transform: translateY(-50%);
+}
+
 .lcd-icon {
-  display: none;
+  display: block;
+  width: clamp(8px, 1.2vw, 10px);
+  height: clamp(8px, 1.2vw, 10px);
 }
 
 .lcd-battery {
@@ -132,18 +145,26 @@
   display: flex;
   min-height: 0;
   flex: 1;
+  align-items: center;
+  gap: clamp(8px, 2.4%, 16px);
+  padding: 4px 3px;
+}
+
+.now-playing__info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
-  justify-content: flex-start;
-  padding: 2px 2px 2px;
-  gap: 1px;
+  justify-content: center;
+  gap: 2px;
 }
 
 .now-playing__index {
-  margin: 0 0 2px;
+  margin: 0;
   color: var(--lcd-ink-soft);
-  font-size: 0.7em;
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-size: 0.6em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -151,14 +172,14 @@
 .now-playing__title {
   display: -webkit-box;
   overflow: hidden;
-  margin: 0;
+  margin: 1px 0 0;
   color: var(--lcd-ink);
-  font-size: 0.95em;
-  font-weight: 400;
+  font-size: 1.02em;
+  font-weight: 700;
   letter-spacing: 0;
-  line-height: 1.12;
+  line-height: 1.18;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   text-overflow: ellipsis;
 }
 
@@ -166,22 +187,25 @@
   overflow: hidden;
   margin: 1px 0 0;
   color: var(--lcd-ink-soft);
-  font-size: 0.82em;
-  font-weight: 400;
-  line-height: 1.12;
+  font-size: 0.85em;
+  font-weight: 500;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .now-playing__status {
-  min-height: 1.2em;
-  margin: 1px 0 0;
+  margin: 5px 0 0;
   color: var(--lcd-ink-soft);
   font-size: 0.6em;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0.04em;
-  line-height: 1.2;
+  line-height: 1;
   text-transform: uppercase;
+}
+
+.now-playing__status.is-hidden {
+  visibility: hidden;
 }
 
 .lcd-seek {
@@ -260,7 +284,7 @@
   margin-top: 0;
   color: var(--lcd-ink-soft);
   font-size: 0.58em;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0.02em;
   line-height: 1;
 }
@@ -284,9 +308,13 @@
 }
 
 .lcd-cover--now {
-  width: clamp(52px, 10vw, 68px);
-  height: clamp(52px, 10vw, 68px);
-  margin: 3px auto 4px;
+  width: clamp(64px, 32%, 118px);
+  height: auto;
+  aspect-ratio: 1;
+  margin: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 1px 2px rgba(83, 98, 116, 0.2);
 }
 
 .lcd-cover--list {
@@ -314,6 +342,8 @@
 .lcd-playlist-name {
   font-size: 1em;
   color: var(--lcd-ink);
+  font-weight: 700;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -417,15 +447,30 @@
 
 .lcd-row--menu,
 .lcd-row--setting {
-  min-height: clamp(18px, 3vw, 24px);
-  font-size: 1.15em;
+  min-height: clamp(20px, 4.4vw, 28px);
+  font-size: 1.1em;
   font-weight: 700;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 1.2;
+}
+
+.lcd-page--menu .lcd-menu {
+  justify-content: flex-start;
+  gap: 0;
+}
+
+.lcd-page--menu .lcd-menu > li {
+  display: flex;
+}
+
+.lcd-page--menu .lcd-row--menu {
+  flex: 1;
+  min-height: clamp(20px, 4.4vw, 28px);
+  padding-block: 0.1em;
 }
 
 .lcd-row--setting {
-  min-height: clamp(18px, 3vw, 24px);
+  min-height: clamp(20px, 4.4vw, 28px);
 }
 
 .lcd-row__label {
@@ -450,7 +495,7 @@
   justify-content: flex-start;
   color: var(--lcd-ink-soft);
   font-size: 0.75em;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 
@@ -476,9 +521,9 @@
 .lcd-row__title {
   overflow: hidden;
   font-size: 1em;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0;
-  line-height: 1.1;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -487,8 +532,8 @@
   overflow: hidden;
   color: var(--lcd-ink-soft);
   font-size: 0.88em;
-  font-weight: 400;
-  line-height: 1.1;
+  font-weight: 500;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -500,10 +545,9 @@
 .lcd-row__value {
   flex: none;
   color: var(--lcd-ink-soft);
-  font-size: 0.45em;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-size: 0.62em;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .lcd-row.is-selected .lcd-row__value {
@@ -518,7 +562,7 @@
   border-top: 1px solid var(--lcd-line);
   color: var(--lcd-ink-soft);
   font-size: 0.52em;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0.04em;
   line-height: 1.2;
   text-align: center;
@@ -570,7 +614,7 @@
   margin: 0;
   color: var(--lcd-ink-soft);
   font-size: 0.65em;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.35;
 }
 
@@ -615,7 +659,7 @@
   cursor: pointer;
   font: inherit;
   font-size: 0.58em;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -657,7 +701,7 @@
   gap: 8px;
   color: var(--lcd-ink-soft);
   font-size: 0.65em;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 

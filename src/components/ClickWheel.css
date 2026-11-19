@@ -72,12 +72,13 @@
   width: clamp(60px, 12vw, 90px);
   transform: translateX(-50%);
   color: #000000;
-  font-family: 'Chicago', 'Chicago LCD', monospace;
+  font-family:
+    'Arimo', 'Helvetica Neue', Helvetica, Arial, 'Segoe UI', Roboto,
+    ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(8px, 1.4vw, 12px);
-  font-weight: 700;
+  font-weight: 600;
   font-synthesis: none;
-  font-kerning: none;
-  letter-spacing: 0;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 

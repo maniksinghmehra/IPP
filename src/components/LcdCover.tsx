@@ -27,15 +27,20 @@ export function LcdCover({ src, alt, size = 72 }: LcdCoverProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
+    let cancelled = false
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.src = src
 
     img.onload = () => {
+      if (cancelled) return
+
       const canvas = canvasRef.current
       if (!canvas) return
 
-      const outSize = Math.max(64, Math.min(96, size))
+      const dpr =
+        typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+      const outSize = Math.min(512, Math.max(128, Math.round(size * dpr)))
       canvas.width = outSize
       canvas.height = outSize
 
@@ -49,44 +54,36 @@ export function LcdCover({ src, alt, size = 72 }: LcdCoverProps) {
       const bg = hexToRgb(BG_COLOR)
       const ink = hexToRgb(INK_COLOR)
 
-      // Draw high-res source
-      const bufSize = outSize * 2
       const buf = document.createElement('canvas')
-      buf.width = bufSize
-      buf.height = bufSize
-      const bctx = buf.getContext('2d')
+      buf.width = outSize
+      buf.height = outSize
+      const bctx = buf.getContext('2d', { willReadFrequently: true })
       if (!bctx) return
 
       bctx.imageSmoothingEnabled = true
-      bctx.drawImage(img, sx, sy, side, side, 0, 0, bufSize, bufSize)
-      const imageData = bctx.getImageData(0, 0, bufSize, bufSize)
-      const data = imageData.data
+      bctx.imageSmoothingQuality = 'high'
+      bctx.drawImage(img, sx, sy, side, side, 0, 0, outSize, outSize)
 
-      ctx.fillStyle = BG_COLOR
-      ctx.fillRect(0, 0, outSize, outSize)
+      const source = bctx.getImageData(0, 0, outSize, outSize)
+      const srcData = source.data
+      const mapped = ctx.createImageData(outSize, outSize)
+      const outData = mapped.data
 
-      // Map to blue-gray gradient with smooth quantization (16+ shades)
-      for (let y = 0; y < bufSize; y += 2) {
-        for (let x = 0; x < bufSize; x += 2) {
-          const idx = (y * bufSize + x) * 4
-          const r = data[idx]
-          const g = data[idx + 1]
-          const b = data[idx + 2]
-          const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-          const t = Math.max(0, Math.min(1, lum / 255))
-          const nr = Math.round(ink.r + (bg.r - ink.r) * t)
-          const ng = Math.round(ink.g + (bg.g - ink.g) * t)
-          const nb = Math.round(ink.b + (bg.b - ink.b) * t)
-          ctx.fillStyle = `rgb(${nr},${ng},${nb})`
-          ctx.fillRect(Math.floor(x / 2), Math.floor(y / 2), 1, 1)
-        }
+      for (let i = 0; i < srcData.length; i += 4) {
+        const lum =
+          0.2126 * srcData[i] + 0.7152 * srcData[i + 1] + 0.0722 * srcData[i + 2]
+        const t = Math.max(0, Math.min(1, lum / 255))
+        outData[i] = Math.round(ink.r + (bg.r - ink.r) * t)
+        outData[i + 1] = Math.round(ink.g + (bg.g - ink.g) * t)
+        outData[i + 2] = Math.round(ink.b + (bg.b - ink.b) * t)
+        outData[i + 3] = 255
       }
 
-      // Very subtle LCD grid
-      ctx.globalAlpha = 0.08
-      ctx.fillStyle = ink.r + ',' + ink.g + ',' + ink.b
-      // simple overlay via fill with low alpha not straightforward; skip heavy grid
-      ctx.globalAlpha = 1
+      ctx.putImageData(mapped, 0, 0)
+    }
+
+    return () => {
+      cancelled = true
     }
   }, [src, size])
 

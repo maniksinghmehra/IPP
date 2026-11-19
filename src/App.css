@@ -5,6 +5,10 @@
   flex-direction: column;
   overflow-x: hidden;
   isolation: isolate;
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
   color: #1a1a1a;
   background:
     radial-gradient(ellipse at center, #f7f7f7 0%, #e5e5e5 60%, #d8d8d8 100%);

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { App as NativeApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { ClickWheel } from './components/ClickWheel'
 import { Screen } from './components/Screen'
@@ -62,10 +64,81 @@ function App() {
   })
   const [volumeIndicatorVisible, setVolumeIndicatorVisible] = useState(false)
   const [playlistSubView, setPlaylistSubView] = useState<'playlists' | 'songs'>('playlists')
+  const [artistIndex, setArtistIndex] = useState(0)
+  const [artistFilter, setArtistFilter] = useState<string | null>(null)
   const menuReturnView = useRef<ScreenView>('nowPlaying')
   const deviceRef = useRef<HTMLDivElement>(null)
   const volumeTimeoutRef = useRef<number | null>(null)
+  const navStateRef = useRef({ view, playlistSubView, artistFilter })
   const hasTracks = status === 'ready' && tracks.length > 0
+
+  const artists = useMemo(
+    () =>
+      Array.from(new Set(tracks.map((track) => track.artist))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [tracks],
+  )
+
+  const songIndices = useMemo(() => {
+    if (!artistFilter) {
+      return tracks.map((_, index) => index)
+    }
+
+    const indices: number[] = []
+    tracks.forEach((track, index) => {
+      if (track.artist === artistFilter) {
+        indices.push(index)
+      }
+    })
+    return indices
+  }, [tracks, artistFilter])
+
+  const songs = useMemo(
+    () => songIndices.map((index) => tracks[index]),
+    [songIndices, tracks],
+  )
+
+  useEffect(() => {
+    navStateRef.current = { view, playlistSubView, artistFilter }
+  }, [view, playlistSubView, artistFilter])
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) {
+      return
+    }
+
+    const listener = NativeApp.addListener('backButton', () => {
+      const state = navStateRef.current
+
+      if (state.view === 'playlist' && state.playlistSubView === 'songs') {
+        setPlaylistSubView('playlists')
+        return
+      }
+
+      if (state.view === 'songs' && state.artistFilter !== null) {
+        setArtistFilter(null)
+        setView('artists')
+        return
+      }
+
+      if (state.view === 'menu') {
+        setView('nowPlaying')
+        return
+      }
+
+      if (state.view !== 'nowPlaying') {
+        setView('menu')
+        return
+      }
+
+      void NativeApp.exitApp()
+    })
+
+    return () => {
+      void listener.then((handle) => handle.remove())
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -102,6 +175,11 @@ function App() {
         return
       }
     }
+    if (view === 'songs' && artistFilter !== null) {
+      setArtistFilter(null)
+      setView('artists')
+      return
+    }
     if (view === 'menu') {
       setView(menuReturnView.current)
       return
@@ -110,7 +188,7 @@ function App() {
     menuReturnView.current = view
     setMenuIndex(menuIndexOf(view))
     setView('menu')
-  }, [view, wakeScreen, playlistSubView])
+  }, [view, wakeScreen, playlistSubView, artistFilter])
 
   const handleMenuSelect = useCallback(
     (target: MenuView) => {
@@ -118,7 +196,11 @@ function App() {
       if (target === 'playlist') {
         setSelectedIndex(currentIndex)
         setPlaylistSubView('playlists')
+      } else if (target === 'artists') {
+        setArtistFilter(null)
+        setArtistIndex(0)
       } else if (target === 'songs') {
+        setArtistFilter(null)
         setSelectedIndex(currentIndex)
         setPlaylistSubView('songs')
       }
@@ -157,15 +239,31 @@ function App() {
         return
       }
 
+      if (view === 'artists') {
+        if (artists.length === 0) {
+          return
+        }
+
+        setArtistIndex((index) => {
+          const nextIdx = index + direction
+          if (nextIdx < 0) return 0
+          if (nextIdx >= artists.length) return artists.length - 1
+          return nextIdx
+        })
+        return
+      }
+
       if (view === 'playlist' || view === 'songs') {
-        if (tracks.length === 0) {
+        const listLength = view === 'songs' ? songs.length : tracks.length
+
+        if (listLength === 0) {
           return
         }
 
         setSelectedIndex((index) => {
           const nextIdx = index + direction
           if (nextIdx < 0) return 0
-          if (nextIdx >= tracks.length) return tracks.length - 1
+          if (nextIdx >= listLength) return listLength - 1
           return nextIdx
         })
         return
@@ -187,8 +285,10 @@ function App() {
     },
     [
       adjustVolume,
+      artists.length,
       hasTracks,
       showVolumeIndicator,
+      songs.length,
       tracks.length,
       view,
       wakeScreen,
@@ -223,6 +323,35 @@ function App() {
       handleMenuSelect(target)
     },
     [handleMenuSelect, playClick, vibrate, wakeScreen],
+  )
+
+  const handleArtistPress = useCallback(
+    (index: number) => {
+      wakeScreen()
+      playClick()
+      vibrate(8)
+      setArtistIndex(index)
+
+      const artist = artists[index]
+
+      if (!artist) {
+        return
+      }
+
+      const indices: number[] = []
+      tracks.forEach((track, trackIndex) => {
+        if (track.artist === artist) {
+          indices.push(trackIndex)
+        }
+      })
+
+      const currentInArtist = indices.indexOf(currentIndex)
+
+      setArtistFilter(artist)
+      setSelectedIndex(currentInArtist >= 0 ? currentInArtist : 0)
+      setView('songs')
+    },
+    [artists, currentIndex, playClick, tracks, vibrate, wakeScreen],
   )
 
   const handleShare = useCallback(async () => {
@@ -383,6 +512,28 @@ function App() {
       return
     }
 
+    if (view === 'artists') {
+      const artist = artists[artistIndex]
+
+      if (!artist) {
+        return
+      }
+
+      const indices: number[] = []
+      tracks.forEach((track, index) => {
+        if (track.artist === artist) {
+          indices.push(index)
+        }
+      })
+
+      const currentInArtist = indices.indexOf(currentIndex)
+
+      setArtistFilter(artist)
+      setSelectedIndex(currentInArtist >= 0 ? currentInArtist : 0)
+      setView('songs')
+      return
+    }
+
     if (view === 'playlist') {
       if (playlistSubView === 'playlists') {
         setPlaylistSubView('songs')
@@ -396,17 +547,20 @@ function App() {
     }
 
     if (view === 'songs') {
-      if (tracks.length === 0) {
+      if (songs.length === 0) {
         return
       }
 
-      handleSelectTrack(selectedIndex)
+      handleSelectTrack(songIndices[selectedIndex])
       return
     }
 
     playClick()
     handleMenuAction()
   }, [
+    artistIndex,
+    artists,
+    currentIndex,
     handleMenuAction,
     handleMenuSelect,
     handleSelectTrack,
@@ -417,7 +571,9 @@ function App() {
     playlistSubView,
     selectedIndex,
     settingsIndex,
-    tracks.length,
+    songIndices,
+    songs.length,
+    tracks,
     vibrate,
     view,
     wakeScreen,
@@ -587,9 +743,16 @@ function App() {
     announcement = 'Your playlist is empty.'
   } else if (status === 'error') {
     announcement = "The playlist couldn't be loaded."
+  } else if (view === 'artists') {
+    const highlightedArtist = artists[artistIndex]
+
+    announcement = highlightedArtist
+      ? `Artists. ${highlightedArtist} highlighted.`
+      : 'Artists. No artists here.'
   } else if (view === 'playlist' || view === 'songs') {
-    const highlightedTrack = tracks[selectedIndex]
-    const label = view === 'playlist' ? PLAYLIST_NAME : 'Songs'
+    const isSongs = view === 'songs'
+    const highlightedTrack = isSongs ? songs[selectedIndex] : tracks[selectedIndex]
+    const label = isSongs ? (artistFilter ?? 'Songs') : PLAYLIST_NAME
 
     announcement = highlightedTrack
       ? `${label}. ${highlightedTrack.title} by ${highlightedTrack.artist} highlighted.`
@@ -619,6 +782,9 @@ function App() {
                 status={status}
                 view={view}
                 tracks={tracks}
+                artists={artists}
+                artistIndex={artistIndex}
+                artistFilter={artistFilter}
                 currentIndex={currentIndex}
                 selectedIndex={selectedIndex}
                 menuIndex={menuIndex}
@@ -637,6 +803,7 @@ function App() {
                 onPlaylistSubViewChange={setPlaylistSubView}
                 onSelectTrack={handleTrackPress}
                 onSelectMenu={handleMenuRowPress}
+                onSelectArtist={handleArtistPress}
                 onSelectSetting={handleSettingPress}
                 onSeek={seek}
                 onRetry={handleRetry}

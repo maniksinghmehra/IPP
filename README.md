@@ -24,6 +24,34 @@ npm run build
 npm run preview
 ```
 
+## Android app
+
+The same player is wrapped as a native Android app with [Capacitor](https://capacitorjs.com). The web build is bundled into the APK, so the app works fully offline. App ID: `com.forastha.player`, display name: `for astha`.
+
+You need **JDK 21** and **Android Studio** (with the Android SDK) installed. Then:
+
+```bash
+npm run android:sync    # build the web app and copy it into android/
+npm run android:open    # open the project in Android Studio
+```
+
+In Android Studio, pick a device or emulator and press **Run**. To build an installable APK from the command line instead:
+
+```powershell
+cd android
+.\gradlew.bat assembleDebug
+```
+
+The APK is written to `android\app\build\outputs\apk\debug\app-debug.apk`. Install it with `adb install` or by opening the file on the phone (allow "install unknown apps" first). The debug build is fine for personal use; a release build needs a signing keystore configured in Android Studio.
+
+Notes:
+
+- Re-run `npm run android:sync` after any web change before rebuilding in Android Studio.
+- The app is locked to portrait, uses the CD artwork in `for astha.jpg` for its launcher icon and splash screen, and maps the hardware back button to the player's menu.
+- Icons and splash screens are generated into `android/app/src/main/res/`. Regenerate them with `npm run android:icons` after replacing `assets/icon.png`.
+- All songs are packaged inside the APK (about 155 MB). Remove unused files from `public/music/` and `public/playlist.json` to slim it down.
+- Playback runs in the Android WebView. It has no lock-screen media controls; if audio pauses when the screen locks on your device, the next step would be a native media-session plugin.
+
 ## Songs and playlist
 
 The current playlist is named **`for astha`** and uses the audio files in `public/music/`. The playlist display name lives in `src/playlist.ts`.
@@ -98,6 +126,9 @@ public/
 ├── music/                 audio files used by the playlist
 ├── playlist.json          the ordered playlist
 └── favicon.svg
+assets/
+└── icon.png               source image for the Android launcher icon
+android/                   generated Capacitor Android project
 src/
 ├── components/
 │   ├── ClickWheel.tsx     wheel buttons, drag stepping, and icons
@@ -117,6 +148,8 @@ src/
 └── types.ts
 ```
 
+`capacitor.config.ts` holds the Android app ID, name, and system-bar settings.
+
 ## Commands
 
 | Command           | Purpose                             |
@@ -125,3 +158,7 @@ src/
 | `npm run build`   | Type-check and build for production |
 | `npm run preview` | Preview the production build        |
 | `npm run lint`    | Run Oxlint                          |
+| `npm run android:sync` | Build the web app and sync it into the Android project |
+| `npm run android:open` | Open the Android project in Android Studio |
+| `npm run android:run`  | Build, sync, and run on a connected device |
+| `npm run android:icons` | Regenerate Android icons and splash screens |
