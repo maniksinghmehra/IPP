@@ -365,10 +365,27 @@ function TrackList({
   const listRef = useRef<HTMLUListElement>(null)
 
   useEffect(() => {
-    const selectedRow = listRef.current?.querySelector<HTMLElement>(
-      '[data-selected="true"]',
-    )
-    selectedRow?.scrollIntoView({ block: 'nearest' })
+    const frame = window.requestAnimationFrame(() => {
+      const list = listRef.current
+      const selectedRow = list?.querySelector<HTMLElement>(
+        '[data-selected="true"]',
+      )
+
+      if (!list || !selectedRow) {
+        return
+      }
+
+      const listRect = list.getBoundingClientRect()
+      const rowRect = selectedRow.getBoundingClientRect()
+
+      if (rowRect.top < listRect.top) {
+        list.scrollTop -= listRect.top - rowRect.top
+      } else if (rowRect.bottom > listRect.bottom) {
+        list.scrollTop += rowRect.bottom - listRect.bottom
+      }
+    })
+
+    return () => window.cancelAnimationFrame(frame)
   }, [selectedIndex])
 
   const showCover = exactLabel && label === PLAYLIST_NAME

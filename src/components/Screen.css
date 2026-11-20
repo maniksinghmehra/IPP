@@ -404,6 +404,10 @@
   margin: 0;
   padding: 0;
   list-style: none;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  touch-action: pan-y;
 }
 
 .lcd-menu::-webkit-scrollbar,

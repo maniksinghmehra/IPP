@@ -29,10 +29,14 @@ interface HoldState {
   fired: boolean
 }
 
-const MIN_STEP_ANGLE = (6 * Math.PI) / 180
-const MAX_STEP_ANGLE = (15 * Math.PI) / 180
-const FAST_ANGULAR_SPEED = 0.035
-const MAX_STEPS_PER_MOVE = 10
+const MIN_STEP_ANGLE = (3.5 * Math.PI) / 180
+const MAX_STEP_ANGLE = (10 * Math.PI) / 180
+const FAST_ANGULAR_SPEED = 0.025
+const MAX_STEPS_PER_MOVE = 24
+const FLING_START_SPEED = 0.008
+const FLING_MIN_SPEED = 0.0015
+const FLING_DECAY = 0.92
+const FLING_MAX_DURATION = 480
 const HOLD_DELAY = 480
 const SCAN_INTERVAL = 110
 
@@ -121,11 +125,17 @@ export function ClickWheel({
     next: false,
   })
   const onScanRef = useRef(onScan)
+  const onStepRef = useRef(onStep)
+  const inertiaRef = useRef<number | null>(null)
   const [engaged, setEngaged] = useState(false)
 
   useEffect(() => {
     onScanRef.current = onScan
   }, [onScan])
+
+  useEffect(() => {
+    onStepRef.current = onStep
+  }, [onStep])
 
   useEffect(() => {
     const holds = holdRef.current
@@ -145,10 +155,85 @@ export function ClickWheel({
     }
   }, [])
 
+  const stopInertia = useCallback(() => {
+    if (inertiaRef.current !== null) {
+      window.cancelAnimationFrame(inertiaRef.current)
+      inertiaRef.current = null
+    }
+  }, [])
+
+  const emitSteps = useCallback(
+    (state: { accumulated: number }, stepAngle: number) => {
+      let steps = 0
+
+      while (
+        Math.abs(state.accumulated) >= stepAngle &&
+        steps < MAX_STEPS_PER_MOVE
+      ) {
+        const direction: 1 | -1 = state.accumulated > 0 ? 1 : -1
+        state.accumulated -= stepAngle * direction
+        onStepRef.current(direction)
+        steps += 1
+      }
+
+      if (steps === MAX_STEPS_PER_MOVE) {
+        state.accumulated = 0
+      }
+    },
+    [],
+  )
+
+  const stepAngleForSpeed = useCallback((speed: number) => {
+    const ratio = Math.min(1, Math.max(0, speed / FAST_ANGULAR_SPEED))
+    return MAX_STEP_ANGLE - (MAX_STEP_ANGLE - MIN_STEP_ANGLE) * ratio
+  }, [])
+
+  const startInertia = useCallback(
+    (velocity: number, accumulated: number) => {
+      stopInertia()
+
+      if (Math.abs(velocity) < FLING_START_SPEED) {
+        return
+      }
+
+      const state = { accumulated, velocity }
+      const startedAt = performance.now()
+      let lastTime = startedAt
+
+      const tick = (now: number) => {
+        const elapsed = Math.min(40, Math.max(1, now - lastTime))
+        lastTime = now
+        state.velocity *= Math.pow(FLING_DECAY, elapsed / 16.667)
+        state.accumulated += state.velocity * elapsed
+
+        emitSteps(state, stepAngleForSpeed(Math.abs(state.velocity)))
+
+        if (
+          now - startedAt >= FLING_MAX_DURATION ||
+          Math.abs(state.velocity) < FLING_MIN_SPEED
+        ) {
+          inertiaRef.current = null
+          return
+        }
+
+        inertiaRef.current = window.requestAnimationFrame(tick)
+      }
+
+      inertiaRef.current = window.requestAnimationFrame(tick)
+    },
+    [emitSteps, stepAngleForSpeed, stopInertia],
+  )
+
   const resetDrag = useCallback(() => {
     dragRef.current = null
     setEngaged(false)
   }, [])
+
+  useEffect(() => {
+    return () => {
+      stopInertia()
+    }
+  }, [stopInertia])
 
   const clearHold = useCallback((direction: HoldDirection) => {
     const hold = holdRef.current[direction]
@@ -219,6 +304,8 @@ export function ClickWheel({
       return
     }
 
+    stopInertia()
+
     if (event.target instanceof Element && event.target.closest('button')) {
       return
     }
@@ -254,42 +341,46 @@ export function ClickWheel({
     const delta = normalizeAngleDelta(angle - drag.lastAngle)
     const elapsed = Math.max(1, event.timeStamp - drag.lastTime)
     const speed = Math.abs(delta) / elapsed
-    drag.velocity = drag.velocity * 0.65 + speed * 0.35
+
+    if (elapsed > 120) {
+      drag.velocity = speed
+    } else {
+      drag.velocity = drag.velocity * 0.6 + speed * 0.4
+    }
+
     drag.accumulated += delta
     drag.lastAngle = angle
     drag.lastTime = event.timeStamp
 
-    const speedRatio = Math.min(1, drag.velocity / FAST_ANGULAR_SPEED)
-    const stepAngle =
-      MAX_STEP_ANGLE - (MAX_STEP_ANGLE - MIN_STEP_ANGLE) * speedRatio
-    let steps = 0
-
-    while (
-      Math.abs(drag.accumulated) >= stepAngle &&
-      steps < MAX_STEPS_PER_MOVE
-    ) {
-      const direction: 1 | -1 = drag.accumulated > 0 ? 1 : -1
-      drag.accumulated -= stepAngle * direction
-      onStep(direction)
-      steps += 1
-    }
-
-    if (steps === MAX_STEPS_PER_MOVE) {
-      drag.accumulated = 0
-    }
+    emitSteps(drag, stepAngleForSpeed(speed))
 
     event.preventDefault()
   }
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId !== event.pointerId) {
+    const drag = dragRef.current
+
+    if (!drag || drag.pointerId !== event.pointerId) {
       return
     }
+
+    dragRef.current = null
+    setEngaged(false)
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
 
+    const idle = event.timeStamp - drag.lastTime
+    startInertia(idle > 80 ? 0 : drag.velocity, drag.accumulated)
+  }
+
+  const handlePointerCancel = () => {
+    if (!dragRef.current) {
+      return
+    }
+
+    stopInertia()
     resetDrag()
   }
 
@@ -304,8 +395,8 @@ export function ClickWheel({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={resetDrag}
-      onLostPointerCapture={resetDrag}
+      onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={handlePointerCancel}
     >
       <span className="click-wheel__inner" aria-hidden="true" />
       <svg

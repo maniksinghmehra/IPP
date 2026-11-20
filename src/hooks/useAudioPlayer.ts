@@ -1,11 +1,20 @@
+import { MediaSession } from '@capgo/capacitor-media-session'
+import type { MediaSessionAction } from '@capgo/capacitor-media-session'
+import { App as NativeApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Track } from '../types'
+import { getCoverDataUrl } from '../utils/coverArt'
+import { loadPlayback, savePlayback } from '../utils/playbackState'
+import type { SavedPlayback } from '../utils/playbackState'
 
 const AUDIO_ERROR_MESSAGE =
   "This track couldn't be loaded. Check that the audio file exists in public/music."
 
 const PRELOAD_SLOTS = 2
 const PREFETCH_DELAY = 800
+const POSITION_SAVE_INTERVAL = 750
+const MEDIA_POSITION_INTERVAL = 900
 
 function isAbortError(error: unknown) {
   return (
@@ -53,7 +62,19 @@ function getPreloadLimit() {
 export function useAudioPlayer(tracks: Track[]) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const spareAudioRefs = useRef<HTMLAudioElement[]>([])
-  const currentIndexRef = useRef(0)
+  const [savedPlayback] = useState<SavedPlayback | null>(() => loadPlayback())
+  const pendingSeekRef = useRef<SavedPlayback | null>(
+    savedPlayback && savedPlayback.time > 0 ? savedPlayback : null,
+  )
+  const applyPendingSeekRef = useRef<(element: HTMLAudioElement) => void>(() => {})
+  const lastPositionSaveRef = useRef(0)
+  const lastMediaPositionRef = useRef(0)
+
+  const [currentIndex, setCurrentIndex] = useState(
+    () => savedPlayback?.index ?? 0,
+  )
+
+  const currentIndexRef = useRef(currentIndex)
   const tracksRef = useRef(tracks)
   const isPlayingRef = useRef(false)
   const autoplayRef = useRef(false)
@@ -61,9 +82,9 @@ export function useAudioPlayer(tracks: Track[]) {
   const loadTimeoutRef = useRef<number | null>(null)
   const lastNavigationRef = useRef(0)
 
-  const [currentIndex, setCurrentIndex] = useState(0)
   const [committedIndex, setCommittedIndex] = useState(-1)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [hasStartedPlayback, setHasStartedPlayback] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -76,6 +97,57 @@ export function useAudioPlayer(tracks: Track[]) {
   })
 
   const currentTrack = tracks[currentIndex] ?? null
+
+  const persistPlayback = useCallback(
+    (index: number, time: number, force = false) => {
+      const now = Date.now()
+
+      if (!force && now - lastPositionSaveRef.current < POSITION_SAVE_INTERVAL) {
+        return
+      }
+
+      lastPositionSaveRef.current = now
+      savePlayback(index, time)
+    },
+    [],
+  )
+
+  const applyPendingSeek = useCallback((element: HTMLAudioElement) => {
+    const pending = pendingSeekRef.current
+
+    if (!pending || element !== audioRef.current) {
+      return
+    }
+
+    if (pending.index !== currentIndexRef.current) {
+      pendingSeekRef.current = null
+      return
+    }
+
+    if (element.readyState < HTMLMediaElement.HAVE_METADATA) {
+      return
+    }
+
+    const duration = Number.isFinite(element.duration) ? element.duration : 0
+    const target =
+      duration > 0
+        ? Math.min(pending.time, Math.max(0, duration - 0.25))
+        : pending.time
+
+    try {
+      element.currentTime = Math.max(0, target)
+      setCurrentTime(element.currentTime)
+    } catch {
+      // The media element may not accept a seek yet; retry on the next event.
+      return
+    }
+
+    pendingSeekRef.current = null
+  }, [])
+
+  useEffect(() => {
+    applyPendingSeekRef.current = applyPendingSeek
+  }, [applyPendingSeek])
 
   useEffect(() => {
     tracksRef.current = tracks
@@ -100,7 +172,11 @@ export function useAudioPlayer(tracks: Track[]) {
     const listeners = audioElements.map((element) => {
       const handleTimeUpdate = () => {
         if (element === audioRef.current) {
-          setCurrentTime(element.currentTime)
+          const t = element.currentTime
+          setCurrentTime(t)
+          if (Number.isFinite(t) && t > 0) {
+            persistPlayback(currentIndexRef.current, t)
+          }
 
           const nextDuration = Number.isFinite(element.duration)
             ? element.duration
@@ -133,6 +209,8 @@ export function useAudioPlayer(tracks: Track[]) {
           if (nextDuration > 0) {
             setDuration(nextDuration)
           }
+
+          applyPendingSeekRef.current(element)
         }
       }
 
@@ -140,6 +218,7 @@ export function useAudioPlayer(tracks: Track[]) {
         if (element === audioRef.current) {
           isPlayingRef.current = true
           setIsPlaying(true)
+          setHasStartedPlayback(true)
         }
       }
 
@@ -182,6 +261,7 @@ export function useAudioPlayer(tracks: Track[]) {
         if (playlist.length === 1) {
           element.currentTime = 0
           setCurrentTime(0)
+          persistPlayback(currentIndexRef.current, 0, true)
           void element.play().catch((error) => {
             if (isAbortError(error) || audioRef.current !== element) {
               return
@@ -199,6 +279,8 @@ export function useAudioPlayer(tracks: Track[]) {
         autoplayRef.current = true
         directionRef.current = 1
         currentIndexRef.current = nextIndex
+        pendingSeekRef.current = null
+        persistPlayback(nextIndex, 0, true)
         setCurrentIndex(nextIndex)
       }
 
@@ -268,7 +350,7 @@ export function useAudioPlayer(tracks: Track[]) {
       audioRef.current = null
       spareAudioRefs.current = []
     }
-  }, [])
+  }, [persistPlayback])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -344,6 +426,8 @@ export function useAudioPlayer(tracks: Track[]) {
       }
 
       if (nextActive) {
+        applyPendingSeekRef.current(nextActive)
+
         if (nextActive.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
           setIsBuffering(false)
         }
@@ -485,6 +569,82 @@ export function useAudioPlayer(tracks: Track[]) {
   }, [committedIndex, tracks, isBuffering])
 
   useEffect(() => {
+    let cancelled = false
+
+    if (!currentTrack) {
+      void MediaSession.setMetadata({
+        title: '',
+        artist: '',
+        album: '',
+        artwork: [],
+      }).catch(() => {})
+      return
+    }
+
+    const metadata = {
+      title: currentTrack.title,
+      artist: currentTrack.artist,
+      album: 'for astha',
+    }
+
+    void MediaSession.setMetadata(metadata).catch(() => {})
+
+    void getCoverDataUrl().then((src) => {
+      if (cancelled || !src) {
+        return
+      }
+
+      void MediaSession.setMetadata({
+        ...metadata,
+        artwork: [{ src, sizes: '512x512', type: 'image/jpeg' }],
+      }).catch(() => {})
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentTrack])
+
+  useEffect(() => {
+    if (currentTrack) {
+      if (!hasStartedPlayback) {
+        return
+      }
+
+      void MediaSession.setPlaybackState({
+        playbackState: isPlaying ? 'playing' : 'paused',
+      }).catch(() => {})
+      return
+    }
+
+    void MediaSession.setPlaybackState({ playbackState: 'none' }).catch(() => {})
+  }, [currentTrack, hasStartedPlayback, isPlaying])
+
+  useEffect(() => {
+    if (!currentTrack || !hasStartedPlayback) {
+      return
+    }
+
+    if (!(Number.isFinite(duration) && duration > 0)) {
+      return
+    }
+
+    const now = Date.now()
+
+    if (isPlaying && now - lastMediaPositionRef.current < MEDIA_POSITION_INTERVAL) {
+      return
+    }
+
+    lastMediaPositionRef.current = now
+
+    void MediaSession.setPositionState({
+      duration,
+      playbackRate: 1,
+      position: Math.min(Math.max(0, currentTime), duration),
+    }).catch(() => {})
+  }, [currentTime, duration, currentTrack, hasStartedPlayback, isPlaying])
+
+  useEffect(() => {
     if (tracks.length === 0) {
       if (currentIndexRef.current !== 0) {
         currentIndexRef.current = 0
@@ -494,6 +654,7 @@ export function useAudioPlayer(tracks: Track[]) {
     }
 
     if (currentIndexRef.current >= tracks.length) {
+      pendingSeekRef.current = null
       currentIndexRef.current = 0
       setCurrentIndex(0)
     }
@@ -557,6 +718,7 @@ export function useAudioPlayer(tracks: Track[]) {
       if (audio) {
         audio.currentTime = 0
         setCurrentTime(0)
+        persistPlayback(nextIndex, 0, true)
         if (autoplay) {
           void audio.play().catch((error) => {
             if (isAbortError(error) || audioRef.current !== audio) {
@@ -576,8 +738,10 @@ export function useAudioPlayer(tracks: Track[]) {
     autoplayRef.current = autoplay
     directionRef.current = index > currentIndexRef.current ? 1 : -1
     currentIndexRef.current = nextIndex
+    pendingSeekRef.current = null
+    persistPlayback(nextIndex, 0, true)
     setCurrentIndex(nextIndex)
-  }, [])
+  }, [persistPlayback])
 
   const selectTrack = useCallback(
     (index: number) => {
@@ -599,32 +763,134 @@ export function useAudioPlayer(tracks: Track[]) {
     goToTrack(currentIndexRef.current - 1, isPlayingRef.current)
   }, [goToTrack])
 
-  const seek = useCallback((seconds: number) => {
-    const audio = audioRef.current
+  const seek = useCallback(
+    (seconds: number) => {
+      const audio = audioRef.current
 
-    if (!audio || !Number.isFinite(audio.duration)) {
-      return
+      if (!audio || !Number.isFinite(audio.duration)) {
+        return
+      }
+
+      const nextTime = Math.max(0, Math.min(seconds, audio.duration))
+      audio.currentTime = nextTime
+      setCurrentTime(nextTime)
+      persistPlayback(currentIndexRef.current, nextTime, true)
+    },
+    [persistPlayback],
+  )
+
+  const seekBy = useCallback(
+    (seconds: number) => {
+      const audio = audioRef.current
+
+      if (!audio || !Number.isFinite(audio.duration)) {
+        return
+      }
+
+      const nextTime = Math.max(
+        0,
+        Math.min(audio.duration, audio.currentTime + seconds),
+      )
+      audio.currentTime = nextTime
+      setCurrentTime(nextTime)
+      persistPlayback(currentIndexRef.current, nextTime, true)
+    },
+    [persistPlayback],
+  )
+
+  useEffect(() => {
+    const flush = () => {
+      const audio = audioRef.current
+
+      if (!audio) {
+        return
+      }
+
+      const time = Number.isFinite(audio.currentTime) ? audio.currentTime : 0
+      persistPlayback(currentIndexRef.current, time, true)
     }
 
-    const nextTime = Math.max(0, Math.min(seconds, audio.duration))
-    audio.currentTime = nextTime
-    setCurrentTime(nextTime)
-  }, [])
-
-  const seekBy = useCallback((seconds: number) => {
-    const audio = audioRef.current
-
-    if (!audio || !Number.isFinite(audio.duration)) {
-      return
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flush()
+      }
     }
 
-    const nextTime = Math.max(
-      0,
-      Math.min(audio.duration, audio.currentTime + seconds),
-    )
-    audio.currentTime = nextTime
-    setCurrentTime(nextTime)
-  }, [])
+    window.addEventListener('pagehide', flush)
+    window.addEventListener('beforeunload', flush)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    let removeNativeListener: (() => void) | null = null
+
+    if (Capacitor.isNativePlatform()) {
+      void NativeApp.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive) {
+          flush()
+        }
+      }).then((handle) => {
+        removeNativeListener = () => {
+          void handle.remove()
+        }
+      })
+    }
+
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      window.removeEventListener('beforeunload', flush)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      removeNativeListener?.()
+    }
+  }, [persistPlayback])
+
+  useEffect(() => {
+    const register = (
+      action: MediaSessionAction,
+      handler: (details: { seekTime?: number | null }) => void,
+    ) => {
+      void MediaSession.setActionHandler({ action }, handler).catch(() => {})
+    }
+
+    register('play', () => {
+      const audio = audioRef.current
+      if (audio && audio.paused) {
+        void startPlayback()
+      }
+    })
+
+    register('pause', () => {
+      const audio = audioRef.current
+      if (audio && !audio.paused) {
+        autoplayRef.current = false
+        audio.pause()
+      }
+    })
+
+    register('previoustrack', () => {
+      goToTrack(currentIndexRef.current - 1, isPlayingRef.current)
+    })
+
+    register('nexttrack', () => {
+      goToTrack(currentIndexRef.current + 1, isPlayingRef.current)
+    })
+
+    register('seekto', (details) => {
+      if (typeof details.seekTime === 'number') {
+        seek(details.seekTime)
+      }
+    })
+
+    return () => {
+      for (const action of [
+        'play',
+        'pause',
+        'previoustrack',
+        'nexttrack',
+        'seekto',
+      ] as MediaSessionAction[]) {
+        void MediaSession.setActionHandler({ action }, null).catch(() => {})
+      }
+    }
+  }, [startPlayback, goToTrack, seek])
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.max(0, Math.min(1, v))

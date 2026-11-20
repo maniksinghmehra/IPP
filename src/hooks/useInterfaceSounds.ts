@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Haptics, ImpactStyle } from '@capacitor/haptics'
 
 type AudioContextConstructor = typeof AudioContext
 
@@ -28,6 +29,7 @@ export function useInterfaceSounds() {
   const contextRef = useRef<AudioContext | null>(null)
   const masterRef = useRef<GainNode | null>(null)
   const reducedMotionRef = useRef(false)
+  const lastHapticRef = useRef(0)
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled
@@ -122,20 +124,6 @@ export function useInterfaceSounds() {
     [ensureAudio],
   )
 
-  const playClick = useCallback(() => {
-    playTone(1200, 0.018, 'square', 0.9)
-    playTone(800, 0.012, 'triangle', 0.4, 0.004)
-  }, [playTone])
-
-  const playTick = useCallback(() => {
-    playTone(2200, 0.01, 'square', 0.7)
-  }, [playTone])
-
-  const playSelect = useCallback(() => {
-    playTone(900, 0.022, 'square', 0.95)
-    playTone(1400, 0.016, 'triangle', 0.5, 0.008)
-  }, [playTone])
-
   const vibrate = useCallback((duration: number | number[]) => {
     if (reducedMotionRef.current) {
       return
@@ -151,6 +139,45 @@ export function useInterfaceSounds() {
       return
     }
   }, [])
+
+  const playTick = useCallback(() => {
+    playTone(2200, 0.01, 'square', 0.7)
+    if (reducedMotionRef.current) {
+      return
+    }
+
+    const now =
+      typeof performance !== 'undefined' ? performance.now() : Date.now()
+
+    if (now - lastHapticRef.current < 35) {
+      return
+    }
+
+    lastHapticRef.current = now
+    Haptics.impact({ style: ImpactStyle.Light }).catch(() => {
+      vibrate(4)
+    })
+  }, [playTone, vibrate])
+
+  const playClick = useCallback(() => {
+    playTone(1200, 0.018, 'square', 0.9)
+    playTone(800, 0.012, 'triangle', 0.4, 0.004)
+    if (!reducedMotionRef.current) {
+      Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {
+        vibrate(10)
+      })
+    }
+  }, [playTone, vibrate])
+
+  const playSelect = useCallback(() => {
+    playTone(900, 0.022, 'square', 0.95)
+    playTone(1400, 0.016, 'triangle', 0.5, 0.008)
+    if (!reducedMotionRef.current) {
+      Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {
+        vibrate(12)
+      })
+    }
+  }, [playTone, vibrate])
 
   const toggleSound = useCallback(() => {
     const next = !soundEnabled

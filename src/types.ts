@@ -2,6 +2,7 @@ export interface Track {
   title: string
   artist: string
   src: string
+  album?: string
 }
 
 export type PlaylistStatus = 'loading' | 'ready' | 'empty' | 'error'

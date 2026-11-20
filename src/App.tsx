@@ -15,6 +15,89 @@ function menuIndexOf(view: MenuView) {
   return MENU_ITEMS.findIndex((item) => item.view === view)
 }
 
+const NAVIGATION_KEY = 'music-nav-state'
+const SCREEN_VIEWS: ScreenView[] = [
+  'nowPlaying',
+  'menu',
+  'playlist',
+  'artists',
+  'songs',
+  'settings',
+]
+
+interface SavedNavigation {
+  view: ScreenView
+  selectedIndex: number
+  menuIndex: number
+  settingsIndex: number
+  playlistSubView: 'playlists' | 'songs'
+  artistIndex: number
+  artistFilter: string | null
+  menuReturnView: ScreenView
+}
+
+function loadNavigation(): Partial<SavedNavigation> {
+  if (typeof window === 'undefined') {
+    return {}
+  }
+
+  try {
+    const raw = localStorage.getItem(NAVIGATION_KEY)
+
+    if (!raw) {
+      return {}
+    }
+
+    const parsed = JSON.parse(raw) as Partial<SavedNavigation>
+    const saved: Partial<SavedNavigation> = {}
+
+    if (
+      typeof parsed.view === 'string' &&
+      SCREEN_VIEWS.includes(parsed.view as ScreenView)
+    ) {
+      saved.view = parsed.view as ScreenView
+    }
+
+    if (Number.isInteger(parsed.selectedIndex) && parsed.selectedIndex! >= 0) {
+      saved.selectedIndex = parsed.selectedIndex
+    }
+
+    if (Number.isInteger(parsed.menuIndex) && parsed.menuIndex! >= 0) {
+      saved.menuIndex = parsed.menuIndex
+    }
+
+    if (Number.isInteger(parsed.settingsIndex) && parsed.settingsIndex! >= 0) {
+      saved.settingsIndex = parsed.settingsIndex
+    }
+
+    if (
+      parsed.playlistSubView === 'playlists' ||
+      parsed.playlistSubView === 'songs'
+    ) {
+      saved.playlistSubView = parsed.playlistSubView
+    }
+
+    if (Number.isInteger(parsed.artistIndex) && parsed.artistIndex! >= 0) {
+      saved.artistIndex = parsed.artistIndex
+    }
+
+    if (typeof parsed.artistFilter === 'string') {
+      saved.artistFilter = parsed.artistFilter
+    }
+
+    if (
+      typeof parsed.menuReturnView === 'string' &&
+      SCREEN_VIEWS.includes(parsed.menuReturnView as ScreenView)
+    ) {
+      saved.menuReturnView = parsed.menuReturnView as ScreenView
+    }
+
+    return saved
+  } catch {
+    return {}
+  }
+}
+
 async function copyToClipboard(text: string) {
   if (navigator.clipboard?.writeText) {
     try {
@@ -51,10 +134,21 @@ function App() {
   const { soundEnabled, toggleSound, playClick, playTick, playSelect, vibrate } =
     useInterfaceSounds()
 
-  const [view, setView] = useState<ScreenView>('nowPlaying')
-  const [selectedIndex, setSelectedIndex] = useState(0)
-  const [menuIndex, setMenuIndex] = useState(0)
-  const [settingsIndex, setSettingsIndex] = useState(0)
+  const [savedNavigation] = useState<Partial<SavedNavigation>>(() =>
+    loadNavigation(),
+  )
+  const [view, setView] = useState<ScreenView>(
+    () => savedNavigation.view ?? 'nowPlaying',
+  )
+  const [selectedIndex, setSelectedIndex] = useState(
+    () => savedNavigation.selectedIndex ?? 0,
+  )
+  const [menuIndex, setMenuIndex] = useState(
+    () => savedNavigation.menuIndex ?? 0,
+  )
+  const [settingsIndex, setSettingsIndex] = useState(
+    () => savedNavigation.settingsIndex ?? 0,
+  )
   const [shareMessage, setShareMessage] = useState<string | null>(null)
   const [backlight, setBacklight] = useState<'low' | 'medium' | 'high'>(() => {
     if (typeof window === 'undefined') return 'medium'
@@ -63,10 +157,18 @@ function App() {
     return 'medium'
   })
   const [volumeIndicatorVisible, setVolumeIndicatorVisible] = useState(false)
-  const [playlistSubView, setPlaylistSubView] = useState<'playlists' | 'songs'>('playlists')
-  const [artistIndex, setArtistIndex] = useState(0)
-  const [artistFilter, setArtistFilter] = useState<string | null>(null)
-  const menuReturnView = useRef<ScreenView>('nowPlaying')
+  const [playlistSubView, setPlaylistSubView] = useState<'playlists' | 'songs'>(
+    () => savedNavigation.playlistSubView ?? 'playlists',
+  )
+  const [artistIndex, setArtistIndex] = useState(
+    () => savedNavigation.artistIndex ?? 0,
+  )
+  const [artistFilter, setArtistFilter] = useState<string | null>(
+    () => savedNavigation.artistFilter ?? null,
+  )
+  const menuReturnView = useRef<ScreenView>(
+    savedNavigation.menuReturnView ?? 'nowPlaying',
+  )
   const deviceRef = useRef<HTMLDivElement>(null)
   const volumeTimeoutRef = useRef<number | null>(null)
   const navStateRef = useRef({ view, playlistSubView, artistFilter })
@@ -102,6 +204,57 @@ function App() {
   useEffect(() => {
     navStateRef.current = { view, playlistSubView, artistFilter }
   }, [view, playlistSubView, artistFilter])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    try {
+      const snapshot: SavedNavigation = {
+        view,
+        selectedIndex,
+        menuIndex,
+        settingsIndex,
+        playlistSubView,
+        artistIndex,
+        artistFilter,
+        menuReturnView: menuReturnView.current,
+      }
+      localStorage.setItem(NAVIGATION_KEY, JSON.stringify(snapshot))
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [
+    view,
+    selectedIndex,
+    menuIndex,
+    settingsIndex,
+    playlistSubView,
+    artistIndex,
+    artistFilter,
+  ])
+
+  useEffect(() => {
+    if (status !== 'ready') {
+      return
+    }
+
+    setMenuIndex((index) => Math.min(index, MENU_ITEMS.length - 1))
+    setSettingsIndex((index) => Math.min(index, SETTINGS_ITEM_COUNT - 1))
+    setArtistIndex((index) => Math.min(index, Math.max(0, artists.length - 1)))
+
+    const listLength = view === 'songs' ? songIndices.length : tracks.length
+    setSelectedIndex((index) => Math.min(index, Math.max(0, listLength - 1)))
+
+    if (artistFilter && !artists.includes(artistFilter)) {
+      setArtistFilter(null)
+
+      if (view === 'songs') {
+        setView('artists')
+      }
+    }
+  }, [status, view, playlistSubView, tracks.length, songIndices.length, artists, artistFilter])
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) {
@@ -475,10 +628,9 @@ function App() {
     (direction: 1 | -1) => {
       wakeScreen()
       playTick()
-      vibrate(6)
       handleStep(direction)
     },
-    [handleStep, playTick, vibrate, wakeScreen],
+    [handleStep, playTick, wakeScreen],
   )
 
   const handleScan = useCallback(
@@ -641,14 +793,20 @@ function App() {
 
       resetTimeout = window.setTimeout(() => {
         accumulated = 0
-      }, 160)
+      }, 220)
 
-      if (Math.abs(accumulated) < 40) {
-        return
+      let steps = 0
+
+      while (Math.abs(accumulated) >= 30 && steps < 5) {
+        const direction = accumulated > 0 ? 1 : -1
+        accumulated -= 30 * direction
+        handleWheelStep(direction)
+        steps += 1
       }
 
-      handleWheelStep(accumulated > 0 ? 1 : -1)
-      accumulated = 0
+      if (steps === 5) {
+        accumulated = 0
+      }
     }
 
     device.addEventListener('wheel', handleWheel, { passive: false })
