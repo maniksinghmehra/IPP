@@ -67,6 +67,7 @@ export function useAudioPlayer(tracks: Track[]) {
     savedPlayback && savedPlayback.time > 0 ? savedPlayback : null,
   )
   const applyPendingSeekRef = useRef<(element: HTMLAudioElement) => void>(() => {})
+  const initialRestoreDoneRef = useRef(false)
   const lastPositionSaveRef = useRef(0)
   const lastMediaPositionRef = useRef(0)
 
@@ -175,9 +176,11 @@ export function useAudioPlayer(tracks: Track[]) {
       const handleTimeUpdate = () => {
         if (element === audioRef.current) {
           const t = element.currentTime
-          setCurrentTime(t)
-          if (Number.isFinite(t) && t > 0) {
-            persistPlayback(currentIndexRef.current, t)
+          if (!pendingSeekRef.current) {
+            setCurrentTime(t)
+            if (Number.isFinite(t) && t >= 0) {
+              persistPlayback(currentIndexRef.current, t)
+            }
           }
 
           const nextDuration = Number.isFinite(element.duration)
@@ -442,8 +445,10 @@ export function useAudioPlayer(tracks: Track[]) {
           setDuration(activeDuration)
         }
 
-        const activeTime = nextActive.currentTime
-        setCurrentTime(Number.isFinite(activeTime) ? activeTime : 0)
+        if (!pendingSeekRef.current) {
+          const activeTime = nextActive.currentTime
+          setCurrentTime(Number.isFinite(activeTime) ? activeTime : 0)
+        }
       }
 
       setCommittedIndex(targetIndex)
@@ -693,11 +698,21 @@ export function useAudioPlayer(tracks: Track[]) {
 
   useEffect(() => {
     if (tracks.length === 0) {
-      if (currentIndexRef.current !== 0) {
-        currentIndexRef.current = 0
-        setCurrentIndex(0)
-      }
       return
+    }
+
+    if (!initialRestoreDoneRef.current) {
+      initialRestoreDoneRef.current = true
+      const saved = loadPlayback()
+      if (saved && saved.index >= 0 && saved.index < tracks.length) {
+        currentIndexRef.current = saved.index
+        setCurrentIndex(saved.index)
+        setCurrentTime(saved.time)
+        if (saved.time > 0) {
+          pendingSeekRef.current = saved
+        }
+        return
+      }
     }
 
     if (currentIndexRef.current >= tracks.length) {
@@ -705,7 +720,7 @@ export function useAudioPlayer(tracks: Track[]) {
       currentIndexRef.current = 0
       setCurrentIndex(0)
     }
-  }, [tracks.length])
+  }, [tracks])
 
   const startPlayback = useCallback(async () => {
     const audio = audioRef.current
