@@ -86,7 +86,9 @@ export function useAudioPlayer(tracks: Track[]) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
+  const [currentTime, setCurrentTime] = useState(
+    () => savedPlayback?.time ?? 0,
+  )
   const [duration, setDuration] = useState(0)
   const [trackError, setTrackError] = useState<string | null>(null)
   const [volume, setVolumeState] = useState(() => {
@@ -359,7 +361,9 @@ export function useAudioPlayer(tracks: Track[]) {
       return
     }
 
-    setCurrentTime(0)
+    if (!pendingSeekRef.current || pendingSeekRef.current.index !== currentIndex) {
+      setCurrentTime(0)
+    }
     setDuration(0)
     setTrackError(null)
     setIsBuffering(currentTrack !== null)
@@ -567,6 +571,49 @@ export function useAudioPlayer(tracks: Track[]) {
 
     return () => window.clearTimeout(timeout)
   }, [committedIndex, tracks, isBuffering])
+
+  useEffect(() => {
+    const saveState = () => {
+      const audio = audioRef.current
+      const t = audio && Number.isFinite(audio.currentTime) && audio.currentTime > 0
+        ? audio.currentTime
+        : currentTime
+      if (Number.isFinite(t)) {
+        savePlayback(currentIndexRef.current, Math.max(0, t))
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saveState()
+      }
+    }
+
+    window.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', saveState)
+    window.addEventListener('beforeunload', saveState)
+
+    let appListener: { remove: () => void } | null = null
+
+    if (Capacitor.isNativePlatform()) {
+      NativeApp.addListener('appStateChange', (state) => {
+        if (!state.isActive) {
+          saveState()
+        }
+      }).then((l) => {
+        appListener = l
+      }).catch(() => {})
+    }
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', saveState)
+      window.removeEventListener('beforeunload', saveState)
+      if (appListener) {
+        appListener.remove()
+      }
+    }
+  }, [currentTime])
 
   useEffect(() => {
     let cancelled = false
