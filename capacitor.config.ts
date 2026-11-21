@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
   appId: 'com.forastha.player',
-  appName: 'for astha',
+  appName: 'P1',
   webDir: 'dist',
   backgroundColor: '#e5e5e5',
   android: {

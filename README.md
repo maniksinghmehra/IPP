@@ -26,7 +26,7 @@ npm run preview
 
 ## Android app
 
-The same player is wrapped as a native Android app with [Capacitor](https://capacitorjs.com). The web build is bundled into the APK, so the app works fully offline. App ID: `com.forastha.player`, display name: `for astha`.
+The same player is wrapped as a native Android app with [Capacitor](https://capacitorjs.com). The web build is bundled into the APK, so the app works fully offline. App ID: `com.forastha.player`, display name: `P1`.
 
 You need **JDK 21** and **Android Studio** (with the Android SDK) installed. Then:
 

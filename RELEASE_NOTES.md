@@ -1,6 +1,6 @@
-# iPod Player v1.0.0 — Native Android & Web Music Player
+# P1 v1.0.0 — Native Android & Web Music Player
 
-Welcome to the official **v1.0.0** release of **iPod Player** (`for astha`), a retro iPod Classic web & native Android music player.
+Welcome to the official **v1.0.0** release of **P1**, a retro iPod Classic web & native Android music player. P1 ships with the **`for astha`** playlist.
 
 ---
 
